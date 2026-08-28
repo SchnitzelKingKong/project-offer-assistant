@@ -1,4 +1,4 @@
-"""Streamlit frontend for the quote-history RAG system.
+"""Streamlit frontend for the Project Offer Assistant.
 
 Run with:  streamlit run streamlit_app.py   (or: make run)
 
@@ -13,7 +13,7 @@ from rag_system.config import settings
 from rag_system.llm import generate_answer
 from rag_system.retriever import Retriever
 
-st.set_page_config(page_title="Quote History RAG", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Project Offer Assistant™", page_icon="📄", layout="wide")
 
 # --- Cached resources (survive Streamlit re-execution) -----------------------
 
@@ -42,8 +42,8 @@ def ask(question: str) -> None:
 
 # --- UI -----------------------------------------------------------------------
 
-st.title("📄 Quote History RAG")
-st.caption("Self-hosted answers over your project quotes — no cloud, no per-token costs.")
+st.title("📄 Project Offer Assistant™")
+st.caption("Your in-house offer history as a RAG database — no cloud, no per-token costs.")
 
 with st.sidebar:
     st.header("Status")

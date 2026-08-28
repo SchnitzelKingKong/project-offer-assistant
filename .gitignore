@@ -18,6 +18,8 @@ references/
 # Local agent/tooling config
 **/.continue
 **/.vscode
+.agents/
+.claude/
 AGENTS.md
 
 .DS_Store

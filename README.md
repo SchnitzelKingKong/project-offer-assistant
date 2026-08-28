@@ -1,7 +1,25 @@
-# Quote History RAG
+# Project Offer Assistant™
 
-A self-hosted RAG application that answers questions over your project quote
-history — no cloud APIs, no per-token costs, full data privacy.
+*Your in-house offer history as a RAG database — for project-based service providers.*
+
+## Mission
+
+The Project Offer Assistant turns a growing pile of past project offers into a
+searchable, self-hosted knowledge base.
+
+It ingests multiple offer documents — heterogeneous PDFs of 1–5 pages each,
+with no uniform structure — and turns them into a structured RAG database that
+you can query in natural language.
+
+The focus is on the context around the numbers: **framework conditions,
+timelines, and line items** — how similar projects were scoped, what was
+included, under which terms.
+
+It is **not a price calculator**. For vague inquiries it answers the question
+that actually matters in the first call: *"where do we end up?"* — an
+orientation based on what similar projects looked like before.
+
+Everything runs in-house: no cloud APIs, no per-token costs, full data privacy.
 
 ## Architecture
 
