@@ -1,0 +1,27 @@
+# Core RAG framework
+llama-index-core==0.14.22
+llama-index-llms-openai==0.7.9
+llama-index-embeddings-ollama==0.9.0
+llama-index-vector-stores-chroma==0.5.5
+llama-index-readers-file==0.6.0
+
+# PDF extraction (PyMuPDF — fast, per-page metadata; pypdf as fallback)
+pymupdf==1.28.2
+pypdf==6.16.1
+
+# Vector database
+chromadb==1.5.9
+
+# LLM / embedding clients
+openai==2.40.0
+ollama==0.6.2
+
+# Frontend
+streamlit>=1.36
+
+# Utilities
+python-dotenv
+tiktoken==0.13.0
+
+# Testing
+pytest
