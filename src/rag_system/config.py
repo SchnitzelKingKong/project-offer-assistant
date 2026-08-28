@@ -28,7 +28,7 @@ class Settings:
 
     # Vector store
     index_dir: str = os.getenv("INDEX_DIR", "index_storage")
-    chroma_collection: str = os.getenv("CHROMA_COLLECTION", "quote_history")
+    chroma_collection: str = os.getenv("CHROMA_COLLECTION", "offers")
 
     # Source documents
     data_dir: str = os.getenv("DATA_DIR", "data")
