@@ -20,7 +20,7 @@ class Settings:
     # LLM (OpenAI-compatible endpoint: vLLM or Ollama)
     llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
     llm_api_key: str = os.getenv("LLM_API_KEY", "ollama")
-    llm_model: str = os.getenv("LLM_MODEL", "qwen2.5:27b")
+    llm_model: str = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
 
     # Embeddings (Ollama, local)
     embed_base_url: str = os.getenv("EMBED_BASE_URL", "http://localhost:11434")

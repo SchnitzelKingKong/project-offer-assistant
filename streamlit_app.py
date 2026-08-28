@@ -7,10 +7,15 @@ The app is a thin UI layer — all RAG logic lives in src/rag_system/.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import streamlit as st
 
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 from rag_system.config import settings
-from rag_system.llm import generate_answer
+from rag_system.llm import chat, generate_answer
 from rag_system.retriever import Retriever
 
 st.set_page_config(page_title="Project Offer Assistant™", page_icon="📄", layout="wide")
@@ -33,11 +38,15 @@ if "messages" not in st.session_state:
 
 
 def ask(question: str) -> None:
-    """Run the RAG pipeline for one question and append the answer."""
-    chunks = retriever.query(question, top_k=settings.top_k)
-    answer = generate_answer(question, chunks)
+    """Answer one question — via RAG if an index exists, else plain chat."""
+    if retriever.is_available:
+        chunks = retriever.query(question, top_k=settings.top_k)
+        answer = generate_answer(question, chunks)
+        st.session_state.last_chunks = chunks
+    else:
+        # Fallback: plain chat while no index has been built yet
+        answer = chat(st.session_state.messages)
     st.session_state.messages.append({"role": "assistant", "content": answer})
-    st.session_state.last_chunks = chunks
 
 
 # --- UI -----------------------------------------------------------------------
@@ -72,6 +81,7 @@ if "last_chunks" in st.session_state and st.session_state.last_chunks:
 
 # Chat input
 if prompt := st.chat_input("Ask about your project quotes…"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
     with st.chat_message("assistant"):
