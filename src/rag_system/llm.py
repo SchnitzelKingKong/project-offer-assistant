@@ -13,15 +13,29 @@ import ollama
 from .config import settings
 from .retriever import RetrievedChunk
 
-SYSTEM_PROMPT = """You are the Project Offer Assistant, an in-house assistant
-for project-based service providers. You answer questions about past project
-offers: framework conditions, timelines, and line items.
+SYSTEM_PROMPT = """Du bist der Angebot-Assistent eines Post-Production-Studios. Du beantwortest
+Fragen zu früheren Angeboten des Studios.
 
-Rules:
-- When context chunks are provided, answer strictly based on them.
-- If the context does not contain a definite answer, say so.
-- Cite the source of each fact using the chunk's source label.
-- Answer in the language of the user's question."""
+REGELN:
+1. Antworte NUR auf Basis des bereitgestellten Kontexts. Erfinde keine Zahlen,
+   Konditionen oder Formulierungen.
+2. Jede konkrete Aussage (Preis, Datum, Zahlungsbedingung, Formulierung) muss
+   einem konkreten Angebot zugeordnet sein. Zitiere inline als [AG####].
+3. Vermische KEINE Daten aus verschiedenen Angeboten zu einer Antwort. Wenn du
+   über mehrere Angebote vergleichst, nenne für jeden Wert das Angebot, aus dem
+   er stammt.
+4. Wenn die Frage ein konkretes Angebot nennt (z.B. "AG0085") und dieses NICHT
+   im Kontext ist: sage das klar ("AG0085 wurde nicht gefunden") und antworte
+   nicht spekulativ.
+5. Wenn der Kontext die Frage nicht beantwortet: lehne ab in einem Satz
+   ("Das steht in den vorliegenden Angeboten nicht.") — keine Schätzung.
+6. Wenn die Frage mehrdeutig ist (z.B. "Wie hoch war der Preis?" ohne
+   Angebotsbezug): antworte NICHT. Stelle stattdessen eine kurze Rückfrage und
+   liste die Kandidaten aus dem Kontext auf, z.B.:
+   "Meinst du eines dieser Angebote? AG0085 (01.05.2026, 5.844,52 €) ·
+   AG0086 (…, 8.160,80 €) · AG0090 (…, 1.251,03 €)"
+7. Antworte auf Deutsch. Struktur: zuerst die direkte Antwort (1–2 Sätze),
+   dann Details mit Zitaten, am Ende die Quellenliste."""
 
 CHAT_SYSTEM_PROMPT = """You are the Project Offer Assistant, an in-house
 assistant for project-based service providers. Be friendly and concise.
@@ -52,16 +66,46 @@ def chat(messages: list[dict]) -> str:
     return response["message"]["content"] or ""
 
 
+def _format_price(value) -> str:
+    """Format a net price for the facts block (German number format)."""
+    if value is None:
+        return "—"
+    return f"{value:,.2f} €".replace(",", "\u00a0").replace(".", ",").replace("\u00a0", ".")
+
+
 def generate_answer(question: str, chunks: list[RetrievedChunk]) -> str:
-    """Generate a grounded answer for the question from retrieved chunks."""
+    """Generate a grounded answer for the question from retrieved chunks.
+
+    The model receives, in order: structured facts for the retrieved offers
+    (from metadata, not from the model's reading of the text), then the
+    numbered chunks, then the question (handoff §3.1).
+    """
+    facts: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        if chunk.source in seen:
+            continue
+        seen.add(chunk.source)
+        meta = chunk.metadata
+        facts.append(
+            f"- {chunk.source}: datum={meta.get('datum') or '—'}, "
+            f"preis={_format_price(meta.get('preis'))}"
+        )
+    facts_block = "\n".join(facts) if facts else "(keine strukturierten Daten)"
+
     context = "\n\n".join(
-        f"[Source: {chunk.source}]\n{chunk.text}" for chunk in chunks
+        f"[{i}] ({chunk.source}, score {chunk.score:.2f})\n{chunk.text}"
+        for i, chunk in enumerate(chunks, start=1)
     )
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": f"Context:\n{context}\n\nQuestion: {question}",
+            "content": (
+                f"Strukturierte Daten der Treffer:\n{facts_block}\n\n"
+                f"Kontext:\n{context}\n\n"
+                f"Frage: {question}"
+            ),
         },
     ]
     return chat(messages)
