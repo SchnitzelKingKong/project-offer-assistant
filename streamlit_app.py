@@ -22,22 +22,6 @@ from rag_system.retriever import Retriever
 
 st.set_page_config(page_title="Project Offer Assistant", page_icon="📄", layout="wide")
 
-# Chat avatar colors: violet for the user, green for the assistant
-# (Streamlit's default red/orange avatars don't fit the theme).
-st.markdown(
-    """
-    <style>
-      [data-testid="stChatMessageAvatarUser"] {
-        background-color: #7c3aed;
-      }
-      [data-testid="stChatMessageAvatarAssistant"] {
-        background-color: #16a34a;
-      }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # --- Cached resources (survive Streamlit re-execution) -----------------------
 
 
@@ -108,7 +92,7 @@ def _text_to_markdown(text: str) -> str:
 
 # --- Inline citation component (CCv2) ----------------------------------------
 # Renders the answer markdown as HTML where every [AG####] is a clickable
-# violet link (plain text, no chip background — chips in the flow of text
+# blue link (plain text, no chip background — chips in the flow of text
 # were distracting). Clicks are reported back via a trigger and open the
 # offer panel.
 
@@ -124,7 +108,7 @@ _ANSWER_CSS = """
 #root ul, #root ol { margin: 0 0 0.6em 0; padding-left: 1.4em; }
 #root li { margin: 0.15em 0; }
 .cite-chip {
-  color: #7c3aed;
+  color: #1a73e8;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
