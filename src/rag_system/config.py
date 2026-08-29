@@ -36,5 +36,16 @@ class Settings:
     # Retrieval
     top_k: int = 3
 
+    # Hybrid retrieval (BM25 + vector, fused via RRF) — ported from
+    # rag-pipeline.ipynb / transcript-rag.ipynb (see HANDOFF §4.1).
+    hybrid_top_n: int = int(os.getenv("HYBRID_TOP_N", "10"))
+    rrf_w_vec: float = float(os.getenv("RRF_W_VEC", "0.5"))
+    rrf_w_bm25: float = float(os.getenv("RRF_W_BM25", "0.5"))
+    rrf_k: int = int(os.getenv("RRF_K", "60"))
+
+    # LLM rerank (top_n → top_k, 0–10 scores) + refusal gate
+    rerank_enabled: bool = os.getenv("RERANK_ENABLED", "1") == "1"
+    refusal_threshold: float = float(os.getenv("REFUSAL_THRESHOLD", "5.0"))
+
 
 settings = Settings()

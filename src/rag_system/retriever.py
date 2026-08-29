@@ -10,9 +10,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import chromadb
+import nltk
 import ollama
+from rank_bm25 import BM25Okapi
 
 from .config import settings
+
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:  # one-time download, needed for BM25 tokenization
+    nltk.download("punkt", quiet=True)
 
 
 @dataclass
@@ -23,6 +30,7 @@ class RetrievedChunk:
     source: str  # offer id (AG####) or document name
     score: float
     metadata: dict = field(default_factory=dict)
+    rerank_score: float | None = None  # 0–10, set by llm.rerank
 
 
 class Retriever:
@@ -95,6 +103,100 @@ class Retriever:
                 RetrievedChunk(text=doc, source=str(source), score=score, metadata=meta)
             )
         return chunks
+
+    # ------------------------------------------------------------------
+    # Hybrid retrieval: BM25 (keyword) + vector (semantic), fused via
+    # Reciprocal Rank Fusion — ported from rag-pipeline.ipynb /
+    # transcript-rag.ipynb (see HANDOFF §4.1).
+    # ------------------------------------------------------------------
+
+    def _bm25_corpus(self, angebot_id: str | None = None) -> list[RetrievedChunk]:
+        """All chunks (optionally filtered by offer id) as BM25 candidates.
+
+        Loaded from Chroma so the corpus always matches the index on disk —
+        no kernel state to drift out of sync.
+        """
+        if self._collection is None:
+            return []
+        result = self._collection.get(include=["documents", "metadatas"])
+        chunks = []
+        for node_id, text, metadata in zip(
+            result["ids"], result["documents"], result["metadatas"]
+        ):
+            if angebot_id and (metadata or {}).get("angebot_id") != angebot_id:
+                continue
+            chunks.append(
+                RetrievedChunk(
+                    text=text or "",
+                    source=(metadata or {}).get("angebot_id", node_id),
+                    score=0.0,
+                    metadata=metadata or {},
+                )
+            )
+        return chunks
+
+    def bm25_search(
+        self, question: str, top_n: int | None = None, angebot_id: str | None = None
+    ) -> list[RetrievedChunk]:
+        """Keyword search over the (optionally filtered) chunk corpus."""
+        top_n = top_n or settings.hybrid_top_n
+        corpus = self._bm25_corpus(angebot_id)
+        if not corpus:
+            return []
+        tokenized = [nltk.word_tokenize(c.text.lower()) for c in corpus]
+        bm25 = BM25Okapi(tokenized)
+        scores = bm25.get_scores(nltk.word_tokenize(question.lower()))
+        top_indices = scores.argsort()[::-1][:top_n]
+        return [corpus[i] for i in top_indices if scores[i] > 0]
+
+    @staticmethod
+    def rrf_fuse(
+        vec_results: list[RetrievedChunk],
+        bm25_results: list[RetrievedChunk],
+        w_vec: float | None = None,
+        w_bm25: float | None = None,
+        k: int | None = None,
+        top_n: int | None = None,
+    ) -> list[RetrievedChunk]:
+        """Reciprocal Rank Fusion of two ranked lists (rank-based, not score-based)."""
+        w_vec = settings.rrf_w_vec if w_vec is None else w_vec
+        w_bm25 = settings.rrf_w_bm25 if w_bm25 is None else w_bm25
+        k = settings.rrf_k if k is None else k
+        top_n = top_n or settings.hybrid_top_n
+
+        fused: dict[str, RetrievedChunk] = {}
+        for rank, chunk in enumerate(vec_results):
+            key = chunk.source + "\x00" + chunk.text
+            entry = fused.setdefault(key, chunk)
+            entry.metadata["rrf_score"] = entry.metadata.get("rrf_score", 0.0) + (
+                w_vec / (k + rank + 1)
+            )
+        for rank, chunk in enumerate(bm25_results):
+            key = chunk.source + "\x00" + chunk.text
+            entry = fused.setdefault(key, chunk)
+            entry.metadata["rrf_score"] = entry.metadata.get("rrf_score", 0.0) + (
+                w_bm25 / (k + rank + 1)
+            )
+        ranked = sorted(fused.values(), key=lambda c: c.metadata["rrf_score"], reverse=True)
+        for chunk in ranked:
+            chunk.score = chunk.metadata["rrf_score"]
+        return ranked[:top_n]
+
+    def hybrid_search(
+        self,
+        question: str,
+        top_n: int | None = None,
+        angebot_id: str | None = None,
+    ) -> list[RetrievedChunk]:
+        """Vector + BM25 retrieval fused via RRF.
+
+        The offer-id filter applies to BOTH the vector query and the BM25
+        corpus, so ID-scoped questions stay scoped.
+        """
+        top_n = top_n or settings.hybrid_top_n
+        vec_results = self.query(question, top_k=top_n, angebot_id=angebot_id)
+        bm25_results = self.bm25_search(question, top_n=top_n, angebot_id=angebot_id)
+        return self.rrf_fuse(vec_results, bm25_results, top_n=top_n)
 
     def candidates_for(self, question: str, top_k: int | None = None) -> list[dict]:
         """Deduplicated offer candidates for clarification.

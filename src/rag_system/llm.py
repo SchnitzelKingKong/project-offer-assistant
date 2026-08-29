@@ -8,6 +8,10 @@ minutes before answering.
 
 from __future__ import annotations
 
+import json
+import re
+import time
+
 import ollama
 
 from .config import settings
@@ -67,6 +71,72 @@ def chat(messages: list[dict]) -> str:
         think=False,
     )
     return response["message"]["content"] or ""
+
+
+def _strip_think(text: str) -> str:
+    """Remove a </think> block if the model thought despite think=False."""
+    if "</think>" in text:
+        text = text.split("</think>", 1)[1].strip()
+    if "<think>" in text:
+        text = text.split("<think>", 1)[0].strip()
+    return text
+
+
+def rerank(
+    question: str,
+    candidates: list[RetrievedChunk],
+    keep: int | None = None,
+) -> list[RetrievedChunk]:
+    """LLM rerank: score each candidate 0–10 for how well it ANSWERS the query.
+
+    Ported from rag-pipeline.ipynb (DaVinci variant, with retry loop).
+    Returns the top-``keep`` candidates sorted by rerank score (desc);
+    each chunk gets ``rerank_score`` set and its ``score`` updated.
+    """
+    keep = keep or settings.top_k
+    if not candidates:
+        return []
+
+    # Chunks can be ~4k chars; key facts (e.g. payment terms) often sit far
+    # into the text, so keep a generous window for the rerank model.
+    numbered = "\n\n".join(
+        f"[{i}] {c.text[:2000]}" for i, c in enumerate(candidates, start=1)
+    )
+    prompt = (
+        f"Given the query, score each passage 0-10 for how well it ANSWERS the query. "
+        f"Return ONLY a JSON object mapping passage number to score.\n\n"
+        f"Query: {question}\n\nPassages:\n{numbered}"
+    )
+    messages = [
+        {"role": "system", "content": "You are a precise ranking engine. Output JSON only."},
+        {"role": "user", "content": prompt},
+    ]
+
+    scores: dict[int, float] = {}
+    for attempt in range(3):
+        try:
+            response = _client().chat(
+                model=settings.llm_model, messages=messages, think=False
+            )
+            text = _strip_think(response["message"]["content"] or "")
+            match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+            if match:
+                raw = json.loads(match.group(0))
+                scores = {int(k): float(v) for k, v in raw.items()}
+                break
+        except Exception:
+            pass
+        time.sleep(0.5 * (attempt + 1))
+
+    if not scores:
+        # Rerank failed — fall back to retrieval order
+        return candidates[:keep]
+
+    for i, chunk in enumerate(candidates, start=1):
+        chunk.rerank_score = scores.get(i, 0.0)
+        chunk.score = chunk.rerank_score
+    ranked = sorted(candidates, key=lambda c: c.rerank_score or 0.0, reverse=True)
+    return ranked[:keep]
 
 
 def _format_price(value) -> str:

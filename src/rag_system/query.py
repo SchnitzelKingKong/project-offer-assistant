@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 
 from .config import settings
-from .llm import generate_answer
+from .llm import generate_answer, rerank
 from .retriever import Retriever, RetrievedChunk
 
 AG_RE = re.compile(r"\bAG\d{4}\b")
@@ -108,13 +108,34 @@ def price_answer(offer_id: str, chunks: list[RetrievedChunk]) -> str | None:
     return None
 
 
+def _rerank_and_gate(
+    question: str, chunks: list[RetrievedChunk]
+) -> tuple[list[RetrievedChunk], str | None]:
+    """Rerank candidates and apply the refusal gate.
+
+    Returns (top_chunks, refusal_message). ``refusal_message`` is set when
+    the best rerank score is below ``settings.refusal_threshold`` — the
+    model is then not allowed to answer (handoff §4.1).
+    """
+    if not settings.rerank_enabled:
+        return chunks[: settings.top_k], None
+    ranked = rerank(question, chunks, keep=settings.top_k)
+    if ranked and (ranked[0].rerank_score or 0.0) < settings.refusal_threshold:
+        return ranked, (
+            "Ich konnte keine zuverlässige Antwort in den vorliegenden "
+            f"Angeboten finden (beste Übereinstimmung: "
+            f"{ranked[0].rerank_score:.0f}/10)."
+        )
+    return ranked, None
+
+
 def run_query(retriever: Retriever, question: str) -> QueryResult:
     """Run the full query pipeline for one question."""
     offer_id = extract_offer_id(question)
 
     # 1) ID-aware retrieval: filter to the referenced offer, no fallback.
     if offer_id:
-        chunks = retriever.query(question, top_k=settings.top_k, angebot_id=offer_id)
+        chunks = retriever.hybrid_search(question, angebot_id=offer_id)
         if not chunks:
             return QueryResult(
                 type="refusal",
@@ -132,6 +153,11 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
                 return QueryResult(
                     type="answer", route="RAG", content=answer, chunks=chunks
                 )
+        chunks, refusal = _rerank_and_gate(question, chunks)
+        if refusal:
+            return QueryResult(
+                type="refusal", route="Refusal", content=refusal, chunks=chunks
+            )
         return QueryResult(
             type="answer",
             route="RAG",
@@ -161,7 +187,12 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
 
     # 3) Aggregation question → explicit limitation until the SQL path exists.
     if is_aggregation(question):
-        chunks = retriever.query(question, top_k=settings.top_k)
+        chunks = retriever.hybrid_search(question)
+        chunks, refusal = _rerank_and_gate(question, chunks)
+        if refusal:
+            return QueryResult(
+                type="refusal", route="Refusal", content=refusal, chunks=chunks
+            )
         answer = generate_answer(question, chunks, retriever.offer_count)
         answer += (
             "\n\n*Hinweis: Ich kann nur die hier geladenen Angebote vergleichen — "
@@ -173,7 +204,12 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
         )
 
     # 4) Default: grounded RAG answer.
-    chunks = retriever.query(question, top_k=settings.top_k)
+    chunks = retriever.hybrid_search(question)
+    chunks, refusal = _rerank_and_gate(question, chunks)
+    if refusal:
+        return QueryResult(
+            type="refusal", route="Refusal", content=refusal, chunks=chunks
+        )
     return QueryResult(
         type="answer",
         route="RAG",
