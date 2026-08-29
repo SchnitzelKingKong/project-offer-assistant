@@ -25,12 +25,20 @@ AG_RE = re.compile(r"\bAG\d{4}\b")
 # Price/date/term questions that carry no offer reference and no year
 # are ambiguous — they must be clarified, not answered.
 AMBIGUOUS_TOPIC_RE = re.compile(
-    r"\b(preis|netto|brutto|nettbetrag|gesamtpreis|summe|zahlung|"
+    r"\b(preis|netto|brutto|nettobetrag|gesamtpreis|summe|zahlung|"
     r"zahlungsbedingung|skonto|f&auml;llig|faellig|datum|termin|"
     r"honorar|kosten|preisbasis)\b",
     re.IGNORECASE,
 )
 YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+
+# Price questions that can be answered deterministically from metadata
+# once the offer is known — no LLM needed.
+PRICE_TOPIC_RE = re.compile(
+    r"\b(preis|netto|brutto|nettobetrag|bruttopreis|gesamtpreis|summe|"
+    r"honorar|kosten)\b",
+    re.IGNORECASE,
+)
 
 # Aggregation signals — structurally impossible with top-k vector search.
 AGGREGATION_RE = re.compile(
@@ -77,6 +85,29 @@ def format_price(value) -> str:
     return f"{value:,.2f} €".replace(",", "\u00a0").replace(".", ",").replace("\u00a0", ".")
 
 
+def is_price_question(question: str) -> bool:
+    """Question asking about the price of an offer."""
+    return bool(PRICE_TOPIC_RE.search(question))
+
+
+def price_answer(offer_id: str, chunks: list[RetrievedChunk]) -> str | None:
+    """Deterministic price answer from chunk metadata, if the price is known.
+
+    Returns None when no retrieved chunk carries a price, so the caller
+    can fall back to the LLM.
+    """
+    for chunk in chunks:
+        price = chunk.metadata.get("preis")
+        if price is not None:
+            datum = chunk.metadata.get("datum") or ""
+            date_part = f" (Datum: {datum})" if datum else ""
+            return (
+                f"Der Nettobetrag von Angebot **{offer_id}** beträgt "
+                f"**{format_price(price)}**{date_part}."
+            )
+    return None
+
+
 def run_query(retriever: Retriever, question: str) -> QueryResult:
     """Run the full query pipeline for one question."""
     offer_id = extract_offer_id(question)
@@ -93,10 +124,18 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
                     "Angeboten gefunden."
                 ),
             )
+        # Price questions with a known offer are answered deterministically
+        # from metadata — no LLM, no confabulated numbers.
+        if is_price_question(question):
+            answer = price_answer(offer_id, chunks)
+            if answer:
+                return QueryResult(
+                    type="answer", route="RAG", content=answer, chunks=chunks
+                )
         return QueryResult(
             type="answer",
             route="RAG",
-            content=generate_answer(question, chunks),
+            content=generate_answer(question, chunks, retriever.offer_count),
             chunks=chunks,
         )
 
@@ -113,14 +152,17 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
             return QueryResult(
                 type="clarify",
                 route="Clarify",
-                content=f"Meinst du eines dieser Angebote? {lines}",
+                content=(
+                    f"Insgesamt liegen {retriever.offer_count} Angebote vor — "
+                    f"meinst du eines dieser? {lines}"
+                ),
                 candidates=candidates,
             )
 
     # 3) Aggregation question → explicit limitation until the SQL path exists.
     if is_aggregation(question):
         chunks = retriever.query(question, top_k=settings.top_k)
-        answer = generate_answer(question, chunks)
+        answer = generate_answer(question, chunks, retriever.offer_count)
         answer += (
             "\n\n*Hinweis: Ich kann nur die hier geladenen Angebote vergleichen — "
             "eine vollständige Auswertung über alle Angebote folgt mit dem "
@@ -135,6 +177,6 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
     return QueryResult(
         type="answer",
         route="RAG",
-        content=generate_answer(question, chunks),
+        content=generate_answer(question, chunks, retriever.offer_count),
         chunks=chunks,
     )
