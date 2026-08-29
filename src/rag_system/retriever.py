@@ -15,6 +15,7 @@ import ollama
 from rank_bm25 import BM25Okapi
 
 from .config import settings
+from .query_expansion import expand_query
 
 try:
     nltk.data.find("tokenizers/punkt")
@@ -192,10 +193,15 @@ class Retriever:
 
         The offer-id filter applies to BOTH the vector query and the BM25
         corpus, so ID-scoped questions stay scoped.
+
+        The question is acronym-expanded (query side only) before retrieval:
+        both the vector and the BM25 path see the expanded form, while the
+        original question stays untouched for rerank, gate, and generation.
         """
         top_n = top_n or settings.hybrid_top_n
-        vec_results = self.query(question, top_k=top_n, angebot_id=angebot_id)
-        bm25_results = self.bm25_search(question, top_n=top_n, angebot_id=angebot_id)
+        expanded = expand_query(question)
+        vec_results = self.query(expanded, top_k=top_n, angebot_id=angebot_id)
+        bm25_results = self.bm25_search(expanded, top_n=top_n, angebot_id=angebot_id)
         return self.rrf_fuse(vec_results, bm25_results, top_n=top_n)
 
     def candidates_for(self, question: str, top_k: int | None = None) -> list[dict]:
