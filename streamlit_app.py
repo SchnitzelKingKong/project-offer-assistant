@@ -40,6 +40,9 @@ if "messages" not in st.session_state:
 
 def ask(question: str) -> None:
     """Answer one question — via RAG if an index exists, else plain chat."""
+    # Defensive: a stale browser tab can hit a fresh server session where
+    # the top-level initialization did not run for this execution.
+    st.session_state.setdefault("messages", [])
     if retriever.is_available:
         result: QueryResult = run_query(retriever, question)
         st.session_state.last_result = result
@@ -127,6 +130,7 @@ if last_result and last_result.type == "clarify" and st.session_state.get("clari
 
 # Chat input
 if prompt := st.chat_input("Ask about your project quotes…"):
+    st.session_state.setdefault("messages", [])
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
