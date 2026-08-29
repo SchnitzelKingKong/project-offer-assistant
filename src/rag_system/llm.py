@@ -42,7 +42,10 @@ REGELN:
    dann Details mit Zitaten, am Ende die Quellenliste.
 8. Der Index enthält insgesamt {offer_count} Angebote. Dein Kontext zeigt nur
    die ähnlichsten Treffer — behaupte niemals, der Index enthalte nur die im
-   Kontext sichtbaren Angebote."""
+   Kontext sichtbaren Angebote.
+9. Nenne Preise, Beträge oder Kosten NUR, wenn die Frage danach fragt.
+   Der Gesamtbetrag eines Angebots ist kein Beleg für den Preis eines
+   einzelnen Leistungspunkts — verwechsle beides nicht."""
 
 CHAT_SYSTEM_PROMPT = """You are the Project Offer Assistant, an in-house
 assistant for project-based service providers. Be friendly and concise.
@@ -179,6 +182,45 @@ def _format_price(value) -> str:
     return f"{value:,.2f} €".replace(",", "\u00a0").replace(".", ",").replace("\u00a0", ".")
 
 
+_PRICE_WORDS = (
+    "preis", "preise", "kosten", "kostet", "betrag", "beträgt", "betrage",
+    "euro", "€", "summe", "honorar", "satz", "tatsachen", "rechnungsbetrag",
+)
+
+
+def question_asks_about_price(question: str) -> bool:
+    """True if the question is about prices, costs or amounts.
+
+    The facts block only includes the total offer price in that case —
+    otherwise the model is tempted to quote totals the user never asked
+    for (and to confuse the offer total with a line-item price).
+    """
+    q = question.lower()
+    return any(word in q for word in _PRICE_WORDS)
+
+
+def _facts_block(chunks: list[RetrievedChunk], question: str) -> str:
+    """Structured per-offer facts for the answer prompt.
+
+    The total offer price is only included when the question is about
+    prices — otherwise it is noise that the model may quote or confuse
+    with line-item prices.
+    """
+    facts: list[str] = []
+    seen: set[str] = set()
+    include_price = question_asks_about_price(question)
+    for chunk in chunks:
+        if chunk.source in seen:
+            continue
+        seen.add(chunk.source)
+        meta = chunk.metadata
+        line = f"- {chunk.source}: datum={meta.get('datum') or '—'}"
+        if include_price:
+            line += f", preis={_format_price(meta.get('preis'))}"
+        facts.append(line)
+    return "\n".join(facts) if facts else "(keine strukturierten Daten)"
+
+
 def generate_answer(
     question: str,
     chunks: list[RetrievedChunk],
@@ -194,18 +236,7 @@ def generate_answer(
     into the system prompt so the model does not claim the index only
     contains the chunks visible in its context.
     """
-    facts: list[str] = []
-    seen: set[str] = set()
-    for chunk in chunks:
-        if chunk.source in seen:
-            continue
-        seen.add(chunk.source)
-        meta = chunk.metadata
-        facts.append(
-            f"- {chunk.source}: datum={meta.get('datum') or '—'}, "
-            f"preis={_format_price(meta.get('preis'))}"
-        )
-    facts_block = "\n".join(facts) if facts else "(keine strukturierten Daten)"
+    facts_block = _facts_block(chunks, question)
 
     context = "\n\n".join(
         f"[{i}] ({chunk.source}, score {chunk.score:.2f})\n{chunk.text}"
