@@ -111,8 +111,8 @@ _ANSWER_CSS = """
   padding: 0 6px;
   margin: 0 1px;
   border-radius: 6px;
-  background: var(--st-secondary-background-color, #e8f0fe);
-  color: var(--st-primary-color, #1a73e8);
+  background: #e8f0fe;
+  color: #1a73e8;
   font-weight: 600;
   font-size: 0.85em;
   text-decoration: none;
@@ -121,7 +121,7 @@ _ANSWER_CSS = """
   white-space: nowrap;
 }
 .cite-chip:hover {
-  border-color: var(--st-primary-color, #1a73e8);
+  border-color: #1a73e8;
   text-decoration: underline;
 }
 """
