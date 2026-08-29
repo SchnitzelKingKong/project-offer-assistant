@@ -33,6 +33,11 @@ class Settings:
     # Source documents
     data_dir: str = os.getenv("DATA_DIR", "data")
 
+    # Optional directory of redacted full-text offer documents
+    # (``<angebot_id>.txt``) for the offer detail panel. Empty → the panel
+    # falls back to the indexed chunks.
+    offer_text_dir: str = os.getenv("OFFER_TEXT_DIR", "")
+
     # Retrieval
     top_k: int = 3
 

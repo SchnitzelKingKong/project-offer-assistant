@@ -6,6 +6,7 @@ never re-embedded at query time.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -243,3 +244,64 @@ class Retriever:
                 }
             )
         return candidates
+
+    def get_offer(self, angebot_id: str) -> dict | None:
+        """Full details for one offer, for the offer detail panel.
+
+        Returns ``{"angebot_id", "datum", "preis", "text", "text_source"}``
+        or ``None`` if the offer is not in the index.
+
+        The full text comes from ``settings.offer_text_dir/<id>.txt`` when
+        that directory is configured and the file exists (redacted full
+        offer text); otherwise it falls back to the offer's indexed chunks
+        joined with blank lines. ``text_source`` is ``"file"`` or
+        ``"index"`` so the UI can label the provenance.
+        """
+        if self._collection is None:
+            return None
+        result = self._collection.get(
+            where={"angebot_id": angebot_id},
+            include=["documents", "metadatas"],
+        )
+        if not result["ids"]:
+            return None
+        meta = result["metadatas"][0] or {}
+        text: str
+        text_source: str
+        text_file = (
+            Path(settings.offer_text_dir) / f"{angebot_id}.txt"
+            if settings.offer_text_dir
+            else None
+        )
+        if text_file and text_file.is_file():
+            text = text_file.read_text(encoding="utf-8")
+            text_source = "file"
+        else:
+            text = "\n\n".join(doc or "" for doc in result["documents"])
+            text_source = "index"
+        return {
+            "angebot_id": angebot_id,
+            "datum": meta.get("datum") or "—",
+            "preis": meta.get("preis"),
+            "text": text,
+            "text_source": text_source,
+        }
+
+
+_OFFER_ID_RE = re.compile(r"\bAG\d{4}\b")
+
+
+def extract_offer_ids(text: str) -> list[str]:
+    """Offer ids (``AG####``) cited in a text, in order of first mention.
+
+    Used to turn the inline ``[AG####]`` citations of an answer into
+    clickable chips. Longer digit runs (e.g. ``AG12345``) do not match.
+    """
+    seen: set[str] = set()
+    ids: list[str] = []
+    for match in _OFFER_ID_RE.finditer(text):
+        offer_id = match.group(0)
+        if offer_id not in seen:
+            seen.add(offer_id)
+            ids.append(offer_id)
+    return ids
