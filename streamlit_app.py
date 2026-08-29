@@ -14,10 +14,11 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+from rag_system.citation_markup import render_answer_html
 from rag_system.config import settings
 from rag_system.llm import chat
 from rag_system.query import QueryResult, format_price, run_query
-from rag_system.retriever import Retriever, extract_offer_ids
+from rag_system.retriever import Retriever
 
 st.set_page_config(page_title="Project Offer Assistant™", page_icon="📄", layout="wide")
 
@@ -89,19 +90,75 @@ def _text_to_markdown(text: str) -> str:
     return "\n\n".join(paragraphs)
 
 
-def _render_citation_chips(message_index: int, content: str) -> None:
-    """Clickable chips for the [AG####] citations of one answer."""
-    for offer_id in extract_offer_ids(content):
-        offer = _offer(offer_id)
-        label = offer_id
-        if offer:
-            preis = (
-                f" · {format_price(offer['preis'])}" if offer.get("preis") else ""
-            )
-            label = f"{offer_id} · {offer['datum']}{preis}"
-        if st.button(label, key=f"cite_{message_index}_{offer_id}", width="stretch"):
-            st.session_state.selected_offer = offer_id
-            st.rerun()
+# --- Inline citation component (CCv2) ----------------------------------------
+# Renders the answer markdown as HTML where every [AG####] is a clickable,
+# highlighted chip. Clicks are reported back via a trigger and open the
+# offer panel.
+
+_ANSWER_HTML = """<div id="root"></div>"""
+
+_ANSWER_CSS = """
+#root {
+  font-size: inherit;
+  line-height: 1.6;
+  color: var(--st-text-color, inherit);
+}
+#root p { margin: 0 0 0.6em 0; }
+#root ul, #root ol { margin: 0 0 0.6em 0; padding-left: 1.4em; }
+#root li { margin: 0.15em 0; }
+.cite-chip {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 6px;
+  background: var(--st-secondary-background-color, #e8f0fe);
+  color: var(--st-primary-color, #1a73e8);
+  font-weight: 600;
+  font-size: 0.85em;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.cite-chip:hover {
+  border-color: var(--st-primary-color, #1a73e8);
+  text-decoration: underline;
+}
+"""
+
+_ANSWER_JS = """
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component
+  const root = parentElement.querySelector("#root")
+  if (!root) return
+  root.innerHTML = (data && data.html) || ""
+  root.querySelectorAll("a.cite-chip").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault()
+      setTriggerValue("clicked", a.getAttribute("data-offer"))
+    })
+  })
+}
+"""
+
+_answer_view = st.components.v2.component(
+    "answer_with_citations",
+    html=_ANSWER_HTML,
+    css=_ANSWER_CSS,
+    js=_ANSWER_JS,
+)
+
+
+def _render_answer(message_index: int, content: str) -> None:
+    """Render one assistant answer with clickable inline citations."""
+    result = _answer_view(
+        key=f"answer_{message_index}",
+        data={"html": render_answer_html(content)},
+        on_clicked_change=lambda: None,
+    )
+    if result.clicked:
+        st.session_state.selected_offer = result.clicked
+        st.rerun()
 
 
 def _render_offer_panel() -> None:
@@ -110,7 +167,7 @@ def _render_offer_panel() -> None:
     selected = st.session_state.get("selected_offer")
     if not selected:
         st.caption(
-            "Klicke auf eine zitierte Citation unter einer Antwort, um das "
+            "Klicke auf eine zitierte Citation im Antworttext, um das "
             "vollständige Angebot zu sehen."
         )
         return
@@ -163,11 +220,12 @@ with chat_col:
     # Render conversation history
     for message_index, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message["role"] == "assistant":
+                _render_answer(message_index, message["content"])
+            else:
+                st.markdown(message["content"])
             if message["role"] == "assistant" and message.get("route"):
                 st.caption(f"Route: **{message['route']}**")
-            if message["role"] == "assistant":
-                _render_citation_chips(message_index, message["content"])
 
     # Show citations of the last answer
     last_result = st.session_state.get("last_result")
