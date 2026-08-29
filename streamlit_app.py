@@ -91,8 +91,9 @@ def _text_to_markdown(text: str) -> str:
 
 
 # --- Inline citation component (CCv2) ----------------------------------------
-# Renders the answer markdown as HTML where every [AG####] is a clickable,
-# highlighted chip. Clicks are reported back via a trigger and open the
+# Renders the answer markdown as HTML where every [AG####] is a clickable
+# blue link (plain text, no chip background — chips in the flow of text
+# were distracting). Clicks are reported back via a trigger and open the
 # offer panel.
 
 _ANSWER_HTML = """<div id="root"></div>"""
@@ -107,21 +108,12 @@ _ANSWER_CSS = """
 #root ul, #root ol { margin: 0 0 0.6em 0; padding-left: 1.4em; }
 #root li { margin: 0.15em 0; }
 .cite-chip {
-  display: inline-block;
-  padding: 0 6px;
-  margin: 0 1px;
-  border-radius: 6px;
-  background: #e8f0fe;
   color: #1a73e8;
   font-weight: 600;
-  font-size: 0.85em;
   text-decoration: none;
   cursor: pointer;
-  border: 1px solid transparent;
-  white-space: nowrap;
 }
 .cite-chip:hover {
-  border-color: #1a73e8;
   text-decoration: underline;
 }
 """
@@ -162,18 +154,17 @@ def _render_answer(message_index: int, content: str) -> None:
 
 
 def _render_offer_panel() -> None:
-    """Right-hand panel showing the full text of the selected offer."""
-    st.subheader("Angebot")
+    """Right-hand panel showing the full text of the selected offer.
+
+    Only rendered while an offer is selected — the first line is the
+    per-offer heading (id, date, price), no generic panel header.
+    """
     selected = st.session_state.get("selected_offer")
     if not selected:
-        st.caption(
-            "Klicke auf eine zitierte Citation im Antworttext, um das "
-            "vollständige Angebot zu sehen."
-        )
         return
     offer = _offer(selected)
     if offer is None:
-        st.warning(f"Angebot {selected} wurde im Index nicht gefunden.")
+        st.warning(f"Offer {selected} was not found in the index.")
         return
     preis = f" · {format_price(offer['preis'])}" if offer.get("preis") else ""
     st.markdown(f"### 📄 {offer['angebot_id']}")
@@ -181,14 +172,10 @@ def _render_offer_panel() -> None:
     with st.container(height=620):
         st.markdown(_text_to_markdown(offer["text"]))
     st.caption(
-        "Quelle: "
-        + (
-            "redigierter Volltext"
-            if offer["text_source"] == "file"
-            else "Index-Chunks"
-        )
+        "Source: "
+        + ("redacted full text" if offer["text_source"] == "file" else "indexed chunks")
     )
-    if st.button("Schließen", key="close_offer_panel"):
+    if st.button("Close", key="close_offer_panel"):
         st.session_state.selected_offer = None
         st.rerun()
 
@@ -214,9 +201,8 @@ with st.sidebar:
         f"Top-k: {settings.top_k}"
     )
 
-chat_col, panel_col = st.columns([3, 2], gap="large")
-
-with chat_col:
+def _render_chat() -> None:
+    """Chat column: history, sources, clarify chips, input."""
     # Render conversation history
     for message_index, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
@@ -241,7 +227,7 @@ with chat_col:
         and last_result.type == "clarify"
         and st.session_state.get("clarify_question")
     ):
-        st.markdown("**Meinst du eines dieser Angebote?**")
+        st.markdown("**Do you mean one of these offers?**")
         cols = st.columns(min(len(last_result.candidates), 3))
         for col, candidate in zip(cols, last_result.candidates):
             with col:
@@ -252,7 +238,7 @@ with chat_col:
                 ):
                     follow_up = (
                         f"{st.session_state.clarify_question} "
-                        f"(gemeint ist Angebot {candidate['angebot_id']})"
+                        f"(meaning offer {candidate['angebot_id']})"
                     )
                     st.session_state.messages.append(
                         {"role": "user", "content": follow_up}
@@ -275,5 +261,14 @@ with chat_col:
                 ask(prompt)
         st.rerun()
 
-with panel_col:
-    _render_offer_panel()
+
+# The offer panel only exists while an offer is selected — otherwise the
+# chat takes the full width and nothing is rendered on the right.
+if st.session_state.get("selected_offer"):
+    chat_col, panel_col = st.columns([3, 2], gap="large")
+    with chat_col:
+        _render_chat()
+    with panel_col:
+        _render_offer_panel()
+else:
+    _render_chat()
