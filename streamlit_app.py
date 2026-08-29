@@ -20,7 +20,23 @@ from rag_system.llm import chat
 from rag_system.query import QueryResult, format_price, run_query
 from rag_system.retriever import Retriever
 
-st.set_page_config(page_title="Project Offer Assistant™", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Project Offer Assistant", page_icon="📄", layout="wide")
+
+# Chat avatar colors: violet for the user, green for the assistant
+# (Streamlit's default red/orange avatars don't fit the theme).
+st.markdown(
+    """
+    <style>
+      [data-testid="stChatMessageAvatarUser"] {
+        background-color: #7c3aed;
+      }
+      [data-testid="stChatMessageAvatarAssistant"] {
+        background-color: #16a34a;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # --- Cached resources (survive Streamlit re-execution) -----------------------
 
@@ -92,7 +108,7 @@ def _text_to_markdown(text: str) -> str:
 
 # --- Inline citation component (CCv2) ----------------------------------------
 # Renders the answer markdown as HTML where every [AG####] is a clickable
-# blue link (plain text, no chip background — chips in the flow of text
+# violet link (plain text, no chip background — chips in the flow of text
 # were distracting). Clicks are reported back via a trigger and open the
 # offer panel.
 
@@ -108,7 +124,7 @@ _ANSWER_CSS = """
 #root ul, #root ol { margin: 0 0 0.6em 0; padding-left: 1.4em; }
 #root li { margin: 0.15em 0; }
 .cite-chip {
-  color: #1a73e8;
+  color: #7c3aed;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
@@ -182,8 +198,11 @@ def _render_offer_panel() -> None:
 
 # --- UI -----------------------------------------------------------------------
 
-st.title("📄 Project Offer Assistant™")
-st.caption("Your in-house offer history as a RAG database — no cloud, no per-token costs.")
+st.title("📄 Project Offer Assistant")
+st.caption(
+    "Your in-house offer history as a RAG database — your quotes, "
+    "searchable. Ask me anything."
+)
 
 with st.sidebar:
     st.header("Status")

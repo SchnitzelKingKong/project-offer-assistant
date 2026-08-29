@@ -1,4 +1,4 @@
-# Project Offer Assistant™
+# Project Offer Assistant
 
 *Your in-house offer history as a RAG database — for project-based service providers.*
 
