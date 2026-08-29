@@ -12,6 +12,10 @@ pypdf==6.16.1
 # Vector database
 chromadb==1.5.9
 
+# Hybrid retrieval (BM25 + vector, RRF) — see HANDOFF-APP-AGENT.md §4.1
+rank-bm25
+nltk
+
 # LLM / embedding clients
 openai==2.40.0
 ollama==0.6.2

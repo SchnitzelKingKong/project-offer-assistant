@@ -35,7 +35,10 @@ REGELN:
    "Meinst du eines dieser Angebote? AG0085 (01.05.2026, 5.844,52 €) ·
    AG0086 (…, 8.160,80 €) · AG0090 (…, 1.251,03 €)"
 7. Antworte auf Deutsch. Struktur: zuerst die direkte Antwort (1–2 Sätze),
-   dann Details mit Zitaten, am Ende die Quellenliste."""
+   dann Details mit Zitaten, am Ende die Quellenliste.
+8. Der Index enthält insgesamt {offer_count} Angebote. Dein Kontext zeigt nur
+   die ähnlichsten Treffer — behaupte niemals, der Index enthalte nur die im
+   Kontext sichtbaren Angebote."""
 
 CHAT_SYSTEM_PROMPT = """You are the Project Offer Assistant, an in-house
 assistant for project-based service providers. Be friendly and concise.
@@ -73,12 +76,20 @@ def _format_price(value) -> str:
     return f"{value:,.2f} €".replace(",", "\u00a0").replace(".", ",").replace("\u00a0", ".")
 
 
-def generate_answer(question: str, chunks: list[RetrievedChunk]) -> str:
+def generate_answer(
+    question: str,
+    chunks: list[RetrievedChunk],
+    offer_count: int | None = None,
+) -> str:
     """Generate a grounded answer for the question from retrieved chunks.
 
     The model receives, in order: structured facts for the retrieved offers
     (from metadata, not from the model's reading of the text), then the
     numbered chunks, then the question (handoff §3.1).
+
+    ``offer_count`` is the total number of offers in the index — injected
+    into the system prompt so the model does not claim the index only
+    contains the chunks visible in its context.
     """
     facts: list[str] = []
     seen: set[str] = set()
@@ -97,8 +108,11 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> str:
         f"[{i}] ({chunk.source}, score {chunk.score:.2f})\n{chunk.text}"
         for i, chunk in enumerate(chunks, start=1)
     )
+    system_prompt = SYSTEM_PROMPT.format(
+        offer_count=offer_count if offer_count else "eine große Zahl"
+    )
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": (
