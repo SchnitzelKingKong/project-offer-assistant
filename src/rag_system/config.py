@@ -43,9 +43,21 @@ class Settings:
     rrf_w_bm25: float = float(os.getenv("RRF_W_BM25", "0.5"))
     rrf_k: int = int(os.getenv("RRF_K", "60"))
 
+    # HyDE (Hypothetical Document Embeddings) — a third RRF list built from an
+    # LLM-written hypothetical answer. Bridges the user↔document vocabulary gap
+    # (retrieval failure mode #2). Off by default; costs one extra LLM call.
+    hyde_enabled: bool = os.getenv("HYDE_ENABLED", "0") == "1"
+    rrf_w_hyde: float = float(os.getenv("RRF_W_HYDE", "0.3"))
+
     # LLM rerank (top_n → top_k, 0–10 scores) + refusal gate
     rerank_enabled: bool = os.getenv("RERANK_ENABLED", "1") == "1"
     refusal_threshold: float = float(os.getenv("REFUSAL_THRESHOLD", "5.0"))
-
+    # Compound questions ("… und …", two question marks): no single chunk
+    # fully answers both parts, so the rerank cut keeps more candidates and
+    # the gate uses a lower bar to avoid false refusals.
+    compound_keep: int = int(os.getenv("COMPOUND_KEEP", "5"))
+    compound_refusal_threshold: float = float(
+        os.getenv("COMPOUND_REFUSAL_THRESHOLD", "4.0")
+    )
 
 settings = Settings()

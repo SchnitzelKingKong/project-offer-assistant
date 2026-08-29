@@ -158,26 +158,34 @@ class Retriever:
         w_bm25: float | None = None,
         k: int | None = None,
         top_n: int | None = None,
+        hyde_results: list[RetrievedChunk] | None = None,
+        w_hyde: float | None = None,
     ) -> list[RetrievedChunk]:
-        """Reciprocal Rank Fusion of two ranked lists (rank-based, not score-based)."""
+        """Reciprocal Rank Fusion of two (or three, with HyDE) ranked lists.
+
+        Rank-based, not score-based: a chunk ranked high in several lists
+        beats a chunk that tops only one.
+        """
         w_vec = settings.rrf_w_vec if w_vec is None else w_vec
         w_bm25 = settings.rrf_w_bm25 if w_bm25 is None else w_bm25
+        w_hyde = settings.rrf_w_hyde if w_hyde is None else w_hyde
         k = settings.rrf_k if k is None else k
         top_n = top_n or settings.hybrid_top_n
 
         fused: dict[str, RetrievedChunk] = {}
-        for rank, chunk in enumerate(vec_results):
-            key = chunk.source + "\x00" + chunk.text
-            entry = fused.setdefault(key, chunk)
-            entry.metadata["rrf_score"] = entry.metadata.get("rrf_score", 0.0) + (
-                w_vec / (k + rank + 1)
-            )
-        for rank, chunk in enumerate(bm25_results):
-            key = chunk.source + "\x00" + chunk.text
-            entry = fused.setdefault(key, chunk)
-            entry.metadata["rrf_score"] = entry.metadata.get("rrf_score", 0.0) + (
-                w_bm25 / (k + rank + 1)
-            )
+
+        def _add(results: list[RetrievedChunk], weight: float) -> None:
+            for rank, chunk in enumerate(results):
+                key = chunk.source + "\x00" + chunk.text
+                entry = fused.setdefault(key, chunk)
+                entry.metadata["rrf_score"] = entry.metadata.get("rrf_score", 0.0) + (
+                    weight / (k + rank + 1)
+                )
+
+        _add(vec_results, w_vec)
+        _add(bm25_results, w_bm25)
+        if hyde_results:
+            _add(hyde_results, w_hyde)
         ranked = sorted(fused.values(), key=lambda c: c.metadata["rrf_score"], reverse=True)
         for chunk in ranked:
             chunk.score = chunk.metadata["rrf_score"]
@@ -188,8 +196,9 @@ class Retriever:
         question: str,
         top_n: int | None = None,
         angebot_id: str | None = None,
+        hyde_passage: str | None = None,
     ) -> list[RetrievedChunk]:
-        """Vector + BM25 retrieval fused via RRF.
+        """Vector + BM25 (+ optional HyDE) retrieval fused via RRF.
 
         The offer-id filter applies to BOTH the vector query and the BM25
         corpus, so ID-scoped questions stay scoped.
@@ -197,12 +206,20 @@ class Retriever:
         The question is acronym-expanded (query side only) before retrieval:
         both the vector and the BM25 path see the expanded form, while the
         original question stays untouched for rerank, gate, and generation.
+
+        ``hyde_passage`` (HyDE) is embedded and vector-searched as a third
+        RRF list — it bridges the user↔document vocabulary gap.
         """
         top_n = top_n or settings.hybrid_top_n
         expanded = expand_query(question)
         vec_results = self.query(expanded, top_k=top_n, angebot_id=angebot_id)
         bm25_results = self.bm25_search(expanded, top_n=top_n, angebot_id=angebot_id)
-        return self.rrf_fuse(vec_results, bm25_results, top_n=top_n)
+        hyde_results: list[RetrievedChunk] | None = None
+        if hyde_passage:
+            hyde_results = self.query(hyde_passage, top_k=top_n, angebot_id=angebot_id)
+        return self.rrf_fuse(
+            vec_results, bm25_results, top_n=top_n, hyde_results=hyde_results
+        )
 
     def candidates_for(self, question: str, top_k: int | None = None) -> list[dict]:
         """Deduplicated offer candidates for clarification.

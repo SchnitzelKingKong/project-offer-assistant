@@ -48,6 +48,20 @@ CHAT_SYSTEM_PROMPT = """You are the Project Offer Assistant, an in-house
 assistant for project-based service providers. Be friendly and concise.
 Answer in the language of the user's question."""
 
+# HyDE (Hypothetical Document Embeddings): the model writes a short passage
+# in the STYLE of an offer document that could answer the question. That
+# passage is embedded and used as a third RRF list — it bridges the
+# user↔document vocabulary gap (retrieval failure mode #2).
+HYDE_PROMPT = (
+    "Schreibe einen kurzen Absatz (max. 80 Wörter), wie er in einem "
+    "Post-Production-Angebot stehen könnte, um die folgende Frage zu "
+    "beantworten. Nutze typische Fachbegriffe aus solchen Angeboten "
+    "(z.B. Planungsrahmen, Zahlungsziel, Skonto, Lieferdateien, Codec, "
+    "Farbraum, Abnahme). Erfinde keine konkreten Zahlen, Preise, Namen "
+    " oder Daten. Gib nur den Absatz aus, ohne Einleitung.\n\n"
+    "Frage: {question}"
+)
+
 
 def _client() -> ollama.Client:
     """Ollama client pointed at the configured endpoint.
@@ -71,6 +85,23 @@ def chat(messages: list[dict]) -> str:
         think=False,
     )
     return response["message"]["content"] or ""
+
+
+def hyde_passage(question: str) -> str:
+    """Write a hypothetical offer-style passage for the question (HyDE).
+
+    Returns an empty string on any failure — the caller then simply skips
+    the HyDE RRF list, so a slow or broken LLM never breaks retrieval.
+    """
+    try:
+        response = _client().chat(
+            model=settings.llm_model,
+            messages=[{"role": "user", "content": HYDE_PROMPT.format(question=question)}],
+            think=False,
+        )
+        return _strip_think(response["message"]["content"] or "").strip()
+    except Exception:
+        return ""
 
 
 def _strip_think(text: str) -> str:
@@ -103,8 +134,10 @@ def rerank(
         f"[{i}] {c.text[:2000]}" for i, c in enumerate(candidates, start=1)
     )
     prompt = (
-        f"Given the query, score each passage 0-10 for how well it ANSWERS the query. "
-        f"Return ONLY a JSON object mapping passage number to score.\n\n"
+        "Given the query, score each passage 0-10 for how well it ANSWERS the "
+        "query. If the query has several parts, a passage that fully answers "
+        "ANY one part deserves a high score. "
+        "Return ONLY a JSON object mapping passage number to score.\n\n"
         f"Query: {question}\n\nPassages:\n{numbered}"
     )
     messages = [

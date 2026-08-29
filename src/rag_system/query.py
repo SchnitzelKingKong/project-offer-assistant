@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 
 from .config import settings
-from .llm import generate_answer, rerank
+from .llm import generate_answer, hyde_passage, rerank
 from .retriever import Retriever, RetrievedChunk
 
 AG_RE = re.compile(r"\bAG\d{4}\b")
@@ -78,6 +78,17 @@ def is_aggregation(question: str) -> bool:
     return bool(AGGREGATION_RE.search(question))
 
 
+def is_compound(question: str) -> bool:
+    """Question with several parts ("… und …", two question marks).
+
+    No single chunk fully answers a compound question, so the rerank cut
+    and the refusal gate need to be more lenient (see _rerank_and_gate).
+    """
+    if question.count("?") >= 2:
+        return True
+    return bool(re.search(r"\bund\b", question, flags=re.IGNORECASE))
+
+
 def format_price(value) -> str:
     """Format a net price in German number format (1.251,03 €)."""
     if value is None:
@@ -109,18 +120,30 @@ def price_answer(offer_id: str, chunks: list[RetrievedChunk]) -> str | None:
 
 
 def _rerank_and_gate(
-    question: str, chunks: list[RetrievedChunk]
+    question: str,
+    chunks: list[RetrievedChunk],
+    compound: bool = False,
 ) -> tuple[list[RetrievedChunk], str | None]:
     """Rerank candidates and apply the refusal gate.
 
     Returns (top_chunks, refusal_message). ``refusal_message`` is set when
-    the best rerank score is below ``settings.refusal_threshold`` — the
-    model is then not allowed to answer (handoff §4.1).
+    the best rerank score is below the threshold — the model is then not
+    allowed to answer (handoff §4.1).
+
+    For compound questions the cut keeps ``compound_keep`` candidates and
+    the gate uses the lower ``compound_refusal_threshold``: no single chunk
+    fully answers a two-part question, so the top score is structurally
+    lower and a strict gate would refuse valid answers.
     """
     if not settings.rerank_enabled:
-        return chunks[: settings.top_k], None
-    ranked = rerank(question, chunks, keep=settings.top_k)
-    if ranked and (ranked[0].rerank_score or 0.0) < settings.refusal_threshold:
+        keep = settings.compound_keep if compound else settings.top_k
+        return chunks[:keep], None
+    keep = settings.compound_keep if compound else settings.top_k
+    threshold = (
+        settings.compound_refusal_threshold if compound else settings.refusal_threshold
+    )
+    ranked = rerank(question, chunks, keep=keep)
+    if ranked and (ranked[0].rerank_score or 0.0) < threshold:
         return ranked, (
             "Ich konnte keine zuverlässige Antwort in den vorliegenden "
             f"Angeboten finden (beste Übereinstimmung: "
@@ -129,13 +152,23 @@ def _rerank_and_gate(
     return ranked, None
 
 
+def _hyde_for(question: str) -> str | None:
+    """HyDE passage for retrieval, or None when disabled/failed."""
+    if not settings.hyde_enabled:
+        return None
+    passage = hyde_passage(question)
+    return passage or None
+
+
 def run_query(retriever: Retriever, question: str) -> QueryResult:
     """Run the full query pipeline for one question."""
     offer_id = extract_offer_id(question)
 
     # 1) ID-aware retrieval: filter to the referenced offer, no fallback.
     if offer_id:
-        chunks = retriever.hybrid_search(question, angebot_id=offer_id)
+        chunks = retriever.hybrid_search(
+            question, angebot_id=offer_id, hyde_passage=_hyde_for(question)
+        )
         if not chunks:
             return QueryResult(
                 type="refusal",
@@ -153,7 +186,7 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
                 return QueryResult(
                     type="answer", route="RAG", content=answer, chunks=chunks
                 )
-        chunks, refusal = _rerank_and_gate(question, chunks)
+        chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
         if refusal:
             return QueryResult(
                 type="refusal", route="Refusal", content=refusal, chunks=chunks
@@ -187,8 +220,8 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
 
     # 3) Aggregation question → explicit limitation until the SQL path exists.
     if is_aggregation(question):
-        chunks = retriever.hybrid_search(question)
-        chunks, refusal = _rerank_and_gate(question, chunks)
+        chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
+        chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
         if refusal:
             return QueryResult(
                 type="refusal", route="Refusal", content=refusal, chunks=chunks
@@ -204,8 +237,8 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
         )
 
     # 4) Default: grounded RAG answer.
-    chunks = retriever.hybrid_search(question)
-    chunks, refusal = _rerank_and_gate(question, chunks)
+    chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
+    chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
     if refusal:
         return QueryResult(
             type="refusal", route="Refusal", content=refusal, chunks=chunks
