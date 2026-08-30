@@ -11,7 +11,7 @@ router, HyDE, statistics and comparison routes).
 |------|---------|------------|
 | `notebooks/` | 5 demo notebooks (run in order 01 → 05) | yes |
 | `source/offers/` | 10 fictitious sample offer PDFs + `generate_sample_pdfs.py` | yes |
-| `sanitizer.py` | `PIISanitizer` (regex PII layer) — imported by notebook 02 from the repo root | yes |
+| `scripts/sanitizer.py` | `PIISanitizer` (regex PII layer) — imported by notebook 02 from `scripts/` | yes |
 | `data/redacted/` | Sanitized full texts + PII block reports (fictitious PII) | yes |
 | `data/extracted/` | Structured facts per offer (JSON) | yes |
 | `data/raw/` | Unredacted intermediate texts | **no** |
@@ -20,7 +20,7 @@ router, HyDE, statistics and comparison routes).
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+pip install -r scripts/requirements.txt
 cp .env.example .env   # adjust LLM/EMBED endpoints
 ```
 

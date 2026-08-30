@@ -1,7 +1,7 @@
 .PHONY: install index run test
 
 install: ## Install dependencies into the active Python environment
-	pip install -r requirements.txt
+	@pip install -r ../scripts/requirements.txt
 
 index: ## (Re)build the vector index from the documents in data/
 	python scripts/build_index.py

@@ -39,7 +39,7 @@ app/
 └── Makefile                install / index / run / test targets
 notebooks/                  offer pipeline (PDF → sanitize → extract → index → demo)
 source/offers/              fictitious sample offers + generator
-sanitizer.py                PII sanitizer (used by the pipeline)
+scripts/                    pipeline scripts (sanitizer.py, requirements.txt)
 data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
 docs/                       sidequest documentation (e.g. vLLM setup)
 .env.example                default configuration (committed)
@@ -70,7 +70,7 @@ conda create -n quote-rag python=3.11 -y
 conda activate quote-rag
 
 # 2. Install dependencies
-make -C app install           # = pip install -r requirements.txt
+make -C app install           # = pip install -r scripts/requirements.txt
 
 # 3. Configure
 cp .env.example .env          # then edit endpoints / model names
@@ -98,7 +98,7 @@ All pipeline parameters (chunking, RRF weights, HyDE, refusal thresholds,
 ## Pipeline
 
 The offer pipeline (PDF → sanitize → extract → index → retrieval demo) lives
-at the repository root: `notebooks/`, `source/offers/`, `sanitizer.py`,
+at the repository root: `notebooks/`, `source/offers/`, `scripts/`,
 `data/`. See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout,
 setup, and how to run the notebooks (01 → 05).
 
