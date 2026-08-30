@@ -109,6 +109,41 @@ def test_upgrade_citations_appends_page_and_date():
     assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
 
 
+def test_upgrade_citations_drops_redundant_sentence_start_citation():
+    # "…möglich sind. AG0085 Wörtlich heißt es: „…" AG0085" — the
+    # sentence-start AG0085 is redundant (already cited in sentence 1).
+    chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = (
+        "In AG0001 gilt Zahlung 14 Tage. AG0001 Wörtlich heißt es: "
+        "\u201eZahlung 14 Tage netto.\u201c AG0001"
+    )
+    upgraded = upgrade_citations(content, [chunk])
+    assert upgraded.count("AG0001") == 2  # in-sentence + after quote
+    assert "In AG0001 gilt Zahlung 14 Tage. Wörtlich heißt es:" in upgraded
+    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+
+
+def test_upgrade_citations_keeps_sentence_start_citation_when_new_offer():
+    # Different offer at the sentence start must NOT be removed.
+    chunk1 = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    chunk2 = _chunk("[Seite 1 von 2] Lieferung in 10 Werktagen.", source="AG0002")
+    content = (
+        "In AG0001 gilt Zahlung 14 Tage. AG0002 Wörtlich heißt es: "
+        "\u201eLieferung in 10 Werktagen.\u201c AG0002"
+    )
+    upgraded = upgrade_citations(content, [chunk1, chunk2])
+    assert "AG0002 Wörtlich heißt es:" in upgraded
+    assert "AG0002, Seite 1 vom 01.05.2026" in upgraded
+
+
+def test_upgrade_citations_keeps_source_list_after_sentence():
+    # "Quellen: AG0001" is not directly after a sentence end.
+    chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = "In AG0001 gilt Zahlung 14 Tage.\n\nQuellen: AG0001"
+    upgraded = upgrade_citations(content, [chunk])
+    assert "Quellen: AG0001" in upgraded
+
+
 def test_upgrade_citations_citation_after_quote_not_in_sentence():
     # New style: "Wörtlich heißt es: „…" AG0001" (id after the quote).
     chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")

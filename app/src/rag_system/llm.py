@@ -40,8 +40,9 @@ REGELN:
    "Wörtlich heißt es: „Zahlungsziel: 14 Tage ab Rechnungsdatum." AG0085"
    (die Seite und das Datum des Dokuments ergänzt die App automatisch).
 4. Zitiere jede Quelle pro Aussage NUR EINMAL — nicht im Satz UND nochmal am
-   Satzende. Ein Satz, der bereits mit AG#### belegt ist, braucht am Ende
-   keine zweite Quellenangabe.
+   Satzende, und nicht am Ende eines Satzes UND nochmal am Anfang des
+   nächsten. Ein Satz, der bereits mit AG#### belegt ist, braucht keine
+   zweite Quellenangabe.
 5. Vermische KEINE Daten aus verschiedenen Angeboten zu einer Antwort. Wenn du
    über mehrere Angebote vergleichst, nenne für jeden Wert das Angebot, aus dem
    er stammt.

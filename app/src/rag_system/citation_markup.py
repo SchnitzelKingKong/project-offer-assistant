@@ -112,6 +112,53 @@ def _format_date(value) -> str | None:
     return str(value)
 
 
+# Sentence end: period/exclamation/question mark, optionally followed by a
+# closing quote, then whitespace.
+_SENTENCE_END_RE = re.compile(r"[.!?][\u201c\"]?\s+")
+
+
+def _dedupe_sentence_start_citations(content: str) -> str:
+    """Drop a citation that starts a sentence when the same offer was
+    already cited in the previous sentence.
+
+    The model sometimes emits the id both at the end of one sentence and
+    again at the start of the next ("…möglich sind. AG0085 Wörtlich heißt
+    es: „…" AG0085") — the sentence-start one is redundant. Only citations
+    DIRECTLY after a sentence end (no letters in between) are removed, so
+    "Quellen: AG0085, AG0086" and in-sentence citations are untouched.
+    A citation that directly follows a verbatim quote is the real one and
+    is never removed.
+    """
+    matches = list(CITE_RE.finditer(content))
+    if len(matches) < 2:
+        return content
+    quote_ends = [m.end() for m in QUOTE_RE.finditer(content)]
+    seen: set[str] = set()
+    removals: list[tuple[int, int]] = []
+    for m in matches:
+        offer_id = m.group(2) or m.group(3)
+        # Never remove the citation that directly follows a quote.
+        if any(not _CITE_GAP_RE.search(content[p : m.start()])
+               for p in quote_ends if p < m.start()):
+            seen.add(offer_id)
+            continue
+        gap = content[: m.start()]
+        ends_sentence = False
+        for sm in _SENTENCE_END_RE.finditer(gap):
+            if not _CITE_GAP_RE.search(gap[sm.end():]):
+                ends_sentence = True
+        if ends_sentence and offer_id in seen:
+            # Also swallow the trailing space so no double space remains.
+            end = m.end()
+            while end < len(content) and content[end] == " ":
+                end += 1
+            removals.append((m.start(), end))
+        seen.add(offer_id)
+    for start, end in reversed(removals):
+        content = content[:start] + content[end:]
+    return content
+
+
 def upgrade_citations(content: str, chunks: list) -> str:
     """Append page and date to citations that directly follow a verbatim
     quote: ``AG0085`` → ``AG0085, Seite 4 vom 01.05.2026`` (and
@@ -122,12 +169,14 @@ def upgrade_citations(content: str, chunks: list) -> str:
     markers inside the chunk, the date from the chunk metadata
     (``datum``). Deterministic — no LLM. Citations that cannot be
     resolved, or that are not directly after a quote (e.g. the trailing
-    source list), are left as plain ``AG####``.
+    source list), are left as plain ``AG####``. A redundant
+    sentence-start citation of an already-cited offer is dropped.
 
     ``chunks`` is the list of ``RetrievedChunk`` objects the answer was
     grounded on (``.source`` = offer id, ``.text`` = chunk text,
     ``.metadata`` = offer metadata incl. ``datum``).
     """
+    content = _dedupe_sentence_start_citations(content)
     quotes = [(m.end(), m.group(1).strip()) for m in QUOTE_RE.finditer(content)]
     if not quotes:
         return content
