@@ -24,18 +24,18 @@ Everything runs in-house: no cloud APIs, no per-token costs, full data privacy.
 ## Architecture
 
 ```
-streamlit_app.py          thin UI layer (chat, citations, status)
-src/rag_system/           RAG logic (testable without the UI)
+app/streamlit_app.py      thin UI layer (chat, citations, status)
+app/src/rag_system/       RAG logic (testable without the UI)
 ├── config.py             settings from .env
 ├── retriever.py          ChromaDB vector retrieval
 └── llm.py                answer generation (OpenAI-compatible endpoint)
-scripts/build_index.py    one-shot index build (PDF → chunk → embed → Chroma)
-tests/                    pytest suite
+app/scripts/build_index.py  one-shot index build (PDF → chunk → embed → Chroma)
+app/tests/                pytest suite
 ```
 
 **Build-once, reload-later:** the vector index is built once by
-`scripts/build_index.py` and persisted to `index_storage/`. The app only
-reloads it — never re-embeds at query time.
+`app/scripts/build_index.py` and persisted to `app/.index_storage/`. The app
+only reloads it — never re-embeds at query time.
 
 | Component | Choice |
 |---|---|
@@ -64,13 +64,13 @@ cp .env.example .env    # then edit endpoints / model names
 ## Usage
 
 ```bash
-make index              # build the vector index from data/ (one-shot)
-make run                # start the app → http://localhost:8501
-make test               # run the test suite
+make -C app index       # build the vector index from data/ (one-shot)
+make -C app run         # start the app → http://localhost:8501
+make -C app test        # run the test suite
 ```
 
 ## Privacy
 
-- Source documents (`data/`), the index (`index_storage/`) and `.env` are
-  git-ignored — real customer data never enters version control.
+- Source documents (`data/`), the index (`app/.index_storage/`) and `.env`
+  are git-ignored — real customer data never enters version control.
 - All inference runs locally / on your own LAN.
