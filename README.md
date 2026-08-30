@@ -57,7 +57,7 @@ notebooks (persisted to `data/db/chroma/`) and the app only reloads it via
 | Python | 3.11 (tested with 3.11.15) |
 | conda (or any env manager) | `conda create -n quote-rag python=3.11` |
 | Ollama | local, for embeddings (`nomic-embed-text`) — CPU is fine |
-| LLM endpoint | any OpenAI-compatible API: vLLM on a GPU machine (see [`docs/local-inference/`](docs/local-inference/README.md)) or Ollama local |
+| LLM endpoint | any OpenAI-compatible API: vLLM on a GPU machine (see [`docs/`](docs/README.md)) or Ollama local |
 | OS | macOS / Linux (developed on macOS) |
 
 No cloud accounts, no paid APIs. Everything runs on your own hardware / LAN.

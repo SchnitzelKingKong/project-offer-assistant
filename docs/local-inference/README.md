@@ -216,6 +216,15 @@ throughput, prefix-cache hit rate and KV-cache usage:
 
 ![Grafana vLLM monitoring dashboard](grafana-monitoring-2026-08-30.png)
 
+## Bonus: developing with the on-prem agent (BYOK)
+
+The same endpoint can serve as the LLM backend for a coding agent. VS Code
+(Copilot, BYOK mode) was pointed at this vLLM server, and **the entire
+repository was developed against it** — no cloud LLM was involved at any
+point during development:
+
+![VS Code wired to the on-prem LLM endpoint (BYOK)](byok-vscode-2026-08-30.png)
+
 ## Health check
 
 ```bash
