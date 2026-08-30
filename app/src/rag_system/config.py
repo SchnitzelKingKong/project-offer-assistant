@@ -12,7 +12,17 @@ from dotenv import load_dotenv
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Load .env from the repo root regardless of the current working directory.
-load_dotenv(_REPO_ROOT / ".env")
+# .env.example acts as the default layer: it is loaded first, then .env
+# overrides it (override=True so .env wins over .env.example). Without a
+# .env, the .env.example values apply as-is.
+load_dotenv(_REPO_ROOT / ".env.example")
+load_dotenv(_REPO_ROOT / ".env", override=True)
+
+# Local-development index override (user-approved 2026-08-30): while the
+# submission pipeline still ships the fictitious demo index, the app can be
+# pointed at the real lecture-project index via INDEX_SOURCE=real in .env.
+# Remove this switch (and the constant) before submission.
+_REAL_INDEX_DIR = ".references/final-project/02-demonstration/data/db/chroma"
 
 
 def _resolve(path: str) -> str:
@@ -43,8 +53,13 @@ class Settings:
     embed_base_url: str = os.getenv("EMBED_BASE_URL", "http://localhost:11434")
     embed_model: str = os.getenv("EMBED_MODEL", "nomic-embed-text")
 
-    # Vector store
-    index_dir: str = _resolve(os.getenv("INDEX_DIR", "app/.index_storage"))
+    # Vector store. INDEX_SOURCE selects the index: "env" (default) uses
+    # INDEX_DIR from the environment files; "real" (local development only)
+    # overrides it with the real lecture-project index.
+    index_source: str = os.getenv("INDEX_SOURCE", "env").strip().lower()
+    index_dir: str = _resolve(
+        _REAL_INDEX_DIR if index_source == "real" else os.getenv("INDEX_DIR", "data/db/chroma")
+    )
     chroma_collection: str = os.getenv("CHROMA_COLLECTION", "offers")
 
     # Source documents
@@ -56,7 +71,7 @@ class Settings:
     offer_text_dir: str = _resolve(os.getenv("OFFER_TEXT_DIR", ""))
 
     # Retrieval
-    top_k: int = 3
+    top_k: int = int(os.getenv("TOP_K", "3"))
 
     # Hybrid retrieval (BM25 + vector, fused via RRF) — ported from
     # rag-pipeline.ipynb / transcript-rag.ipynb (see HANDOFF §4.1).
