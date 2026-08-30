@@ -48,7 +48,7 @@ def _chip_replacement(match: re.Match) -> str:
     return f'<a class="cite-chip" data-offer="{offer_id}" href="#">{offer_id}</a>'
 
 
-# --- Page-level citations: AG#### → AG####, Seite X --------------------------
+# --- Page-level citations: AG#### → date · AG#### (S. X) ---------------------
 # The model quotes the decisive passage verbatim (in „…"); the page is then
 # resolved DETERMINISTICALLY from the "[Seite X von Y]" markers inside the
 # chunk text. A quote that cannot be located verbatim never gets a page
@@ -63,10 +63,10 @@ PAGE_RE = re.compile(r"\[Seite (\d+) von \d+\]")
 # double quote instead of ", so accept both closing variants.
 QUOTE_RE = re.compile(r"[\u201e\"](.+?)[\u201c\"]", flags=re.DOTALL)
 # Bracketed ids (legacy model output) or plain ids; never one that already
-# carries a page ("AG0085, Seite 4").
+# carries a page ("AG0085, Seite 4" or the upgraded "AG0085 (S. 4)").
 CITE_RE = re.compile(
     r"(\[(AG\d{4})(?:\s*\|[^\]]*)?\]|(?<![A-Za-z0-9\[])(AG\d{4})(?!\d))"
-    r"(?!\s*,\s*(?:S\.|Seite)\s*\d)"
+    r"(?!\s*(?:,|\()\s*(?:S\.|Seite)\s*\d)"
 )
 # The gap between the closing quote and the citation must contain no letters
 # for the page upgrade to apply — "„…" AG0001" qualifies, but a source list
@@ -160,17 +160,20 @@ def _dedupe_sentence_start_citations(content: str) -> str:
 
 
 def upgrade_citations(content: str, chunks: list) -> str:
-    """Append page and date to citations that directly follow a verbatim
-    quote: ``AG0085`` → ``AG0085, Seite 4 vom 01.05.2026`` (and
+    """Upgrade citations that directly follow a verbatim quote to the full
+    schema: ``AG0085`` → ``01.05.2026 · AG0085 (S. 4)`` (and
     ``[AG0085]`` → same).
 
-    For each citation the nearest preceding verbatim quote (``„…"``) is
-    located in that offer's chunk texts; the page comes from the page
-    markers inside the chunk, the date from the chunk metadata
-    (``datum``). Deterministic — no LLM. Citations that cannot be
-    resolved, or that are not directly after a quote (e.g. the trailing
-    source list), are left as plain ``AG####``. A redundant
-    sentence-start citation of an already-cited offer is dropped.
+    The result reads as one citation block after the quote:
+    ``„…" — 01.05.2026 · AG0085 (S. 4)``. The em dash is added when the
+    quote is not already followed by one. For each citation the nearest
+    preceding verbatim quote (``„…"``) is located in that offer's chunk
+    texts; the page comes from the page markers inside the chunk, the date
+    from the chunk metadata (``datum``). Deterministic — no LLM. Missing
+    parts are omitted (no date → no date, no page → no ``(S. N)``); a
+    citation that cannot be resolved at all, or that is not directly after
+    a quote (e.g. the trailing source list), stays plain ``AG####``. A
+    redundant sentence-start citation of an already-cited offer is dropped.
 
     ``chunks`` is the list of ``RetrievedChunk`` objects the answer was
     grounded on (``.source`` = offer id, ``.text`` = chunk text,
@@ -191,24 +194,31 @@ def upgrade_citations(content: str, chunks: list) -> str:
         # Only upgrade when a verbatim quote ENDS directly before the
         # citation (gap without letters) — that is the
         # "Wörtlich heißt es in AG0085: „…“ AG0085" pattern.
-        preceding = [
-            q for p, q in quotes
+        candidates = [
+            (p, q) for p, q in quotes
             if p < m.start() and not _CITE_GAP_RE.search(content[p : m.start()])
         ]
-        if not preceding:
+        if not candidates:
             continue
-        quote = preceding[-1]
+        quote_pos, quote = candidates[-1]
         page = None
         for text in texts.get(offer_id, []):
             page = page_of_quote(text, quote)
             if page:
                 break
-        if page:
-            repl = f"{offer_id}, Seite {page}"
-            date = dates.get(offer_id)
-            if date:
-                repl += f" vom {date}"
-            pairs.append((m, repl))
+        if not page:
+            continue  # quote not located — never guess a page or date
+        date = dates.get(offer_id)
+        parts = [date] if date else []
+        parts.append(f"{offer_id} (S. {page})" if page else offer_id)
+        repl = " · ".join(parts)
+        # The citation block is separated from the quote by an em dash:
+        # „…" — 01.05.2026 · AG0085 (S. 4). Add it unless the model
+        # already put one there.
+        gap = content[quote_pos : m.start()]
+        if "—" not in gap and "–" not in gap:
+            repl = (" — " if not gap else "— ") + repl
+        pairs.append((m, repl))
     # Replace from the end so earlier positions stay valid.
     for m, repl in reversed(pairs):
         content = content[: m.start()] + repl + content[m.end():]

@@ -106,7 +106,7 @@ def test_upgrade_citations_appends_page_and_date():
     chunk = _chunk("[Seite 1 von 4] Kopf\n[Seite 2 von 4] Zahlung 14 Tage netto.")
     content = "Wörtlich heißt es in AG0001: \u201eZahlung 14 Tage netto.\u201c AG0001"
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+    assert "\u201eZahlung 14 Tage netto.\u201c — 01.05.2026 · AG0001 (S. 2)" in upgraded
 
 
 def test_upgrade_citations_drops_redundant_sentence_start_citation():
@@ -120,7 +120,7 @@ def test_upgrade_citations_drops_redundant_sentence_start_citation():
     upgraded = upgrade_citations(content, [chunk])
     assert upgraded.count("AG0001") == 2  # in-sentence + after quote
     assert "In AG0001 gilt Zahlung 14 Tage. Wörtlich heißt es:" in upgraded
-    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+    assert "\u201c — 01.05.2026 · AG0001 (S. 2)" in upgraded
 
 
 def test_upgrade_citations_keeps_sentence_start_citation_when_new_offer():
@@ -133,7 +133,7 @@ def test_upgrade_citations_keeps_sentence_start_citation_when_new_offer():
     )
     upgraded = upgrade_citations(content, [chunk1, chunk2])
     assert "AG0002 Wörtlich heißt es:" in upgraded
-    assert "AG0002, Seite 1 vom 01.05.2026" in upgraded
+    assert "\u201c — 01.05.2026 · AG0002 (S. 1)" in upgraded
 
 
 def test_upgrade_citations_keeps_source_list_after_sentence():
@@ -149,7 +149,7 @@ def test_upgrade_citations_citation_after_quote_not_in_sentence():
     chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
     content = "Wörtlich heißt es: \u201eZahlung 14 Tage netto.\u201c AG0001"
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+    assert "\u201c — 01.05.2026 · AG0001 (S. 2)" in upgraded
 
 
 def test_upgrade_citations_accepts_straight_closing_quote():
@@ -157,7 +157,7 @@ def test_upgrade_citations_accepts_straight_closing_quote():
     chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
     content = 'Wörtlich heißt es in AG0001: \u201eZahlung 14 Tage netto." AG0001'
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+    assert '" — 01.05.2026 · AG0001 (S. 2)' in upgraded
 
 
 def test_upgrade_citations_without_date_metadata():
@@ -167,15 +167,15 @@ def test_upgrade_citations_without_date_metadata():
     )
     content = "Wörtlich: \u201eZahlung 14 Tage netto.\u201c AG0001"
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2" in upgraded
-    assert "vom" not in upgraded
+    assert "\u201c — AG0001 (S. 2)" in upgraded
+    assert "01.05.2026" not in upgraded
 
 
 def test_upgrade_citations_bracketed_id_becomes_plain_with_page():
     chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
     content = "Wörtlich: \u201eZahlung 14 Tage netto.\u201c [AG0001]"
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+    assert "\u201c — 01.05.2026 · AG0001 (S. 2)" in upgraded
     assert "[AG0001]" not in upgraded
 
 
@@ -206,5 +206,5 @@ def test_upgrade_citations_leaves_trailing_source_list_plain():
         "Quellen: AG0001, AG0002"
     )
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+    assert "\u201c — 01.05.2026 · AG0001 (S. 2)" in upgraded
     assert "Quellen: AG0001, AG0002" in upgraded  # untouched

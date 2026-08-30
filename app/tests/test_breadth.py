@@ -12,8 +12,10 @@ from rag_system.breadth import (
     full_scan_facts,
     is_comparison,
     is_statistics,
+    is_year_question,
     reduce_statistics,
     statistics_route,
+    year_route,
 )
 from rag_system.retriever import RetrievedChunk
 
@@ -34,6 +36,14 @@ def test_is_comparison_matches_comparison_words():
     assert is_comparison("Was sind die Unterschiede bei der Lieferzeit?")
     assert is_comparison("Stellen Sie die Angebote nebeneinander.")
     assert not is_comparison("Wie hoch war der Preis von AG0085?")
+
+
+def test_is_year_question_matches_year_plus_offer_word():
+    assert is_year_question("Welche Angebote sind im Jahr 2024?")
+    assert is_year_question("Gibt es Angebote aus 2023?")
+    # A single aspect of a year is NOT a year-list question.
+    assert not is_year_question("Wie hoch war der Preis im Jahr 2024?")
+    assert not is_year_question("Wie sind die Zahlungsbedingungen?")
 
 
 # --- Statistics reduce (pure code, no LLM) -----------------------------------
@@ -151,6 +161,49 @@ def test_full_scan_facts_skips_unextractable_offers():
         facts = full_scan_facts(_FakeRetriever())
     assert facts == {}
     _FACTS_CACHE.clear()
+
+
+# --- Year route (deterministic metadata scan) ---------------------------------
+
+
+class _YearFakeRetriever:
+    def all_offer_chunks(self):
+        return {
+            "AG0070": [RetrievedChunk(
+                text="...", source="AG0070", score=0.0,
+                metadata={"datum": "2024-06-14"})],
+            "AG0071": [RetrievedChunk(
+                text="...", source="AG0071", score=0.0,
+                metadata={"datum": "2024-07-01"})],
+            "AG0073": [RetrievedChunk(
+                text="...", source="AG0073", score=0.0,
+                metadata={"datum": "2024-08-19"})],
+            "AG0085": [RetrievedChunk(
+                text="...", source="AG0085", score=0.0,
+                metadata={"datum": "2026-05-01"})],
+        }
+
+
+def test_year_route_lists_all_offers_of_the_year_sorted():
+    route, content, chunks = year_route(
+        _YearFakeRetriever(), "Welche Angebote sind im Jahr 2024?")
+    assert route == "Breadth"
+    assert chunks == []  # no retrieval involved
+    assert "3 Angebote" in content
+    assert "AG0073 (19.08.2024)" in content
+    assert "AG0071 (01.07.2024)" in content
+    assert "AG0070 (14.06.2024)" in content
+    assert "AG0085" not in content
+    # Newest first.
+    assert content.index("AG0073") < content.index("AG0071") < content.index("AG0070")
+
+
+def test_year_route_without_matches_reports_empty():
+    route, content, chunks = year_route(
+        _YearFakeRetriever(), "Welche Angebote sind im Jahr 1999?")
+    assert route == "Breadth"
+    assert "Kein Angebot aus dem Jahr 1999" in content
+    assert "4 Angebote" in content  # full scan over the whole index
 
 
 # --- Comparison route (map/reduce mocked) ------------------------------------

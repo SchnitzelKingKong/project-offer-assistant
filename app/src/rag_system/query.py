@@ -25,7 +25,9 @@ from .breadth import (
     comparison_route,
     is_comparison,
     is_statistics,
+    is_year_question,
     statistics_route,
+    year_route,
 )
 from .config import settings
 from .llm import generate_answer, hyde_passage, rerank
@@ -223,7 +225,13 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
         )
         return QueryResult(type="answer", route=route, content=content, chunks=chunks)
 
-    # 4) Ambiguous price/date/term question → clarification (no LLM call).
+    # 4) Year-list question ("Welche Angebote sind im Jahr 2024?") →
+    #    deterministic metadata scan — complete list, no LLM, no retrieval.
+    if is_year_question(question):
+        route, content, chunks = year_route(retriever, question)
+        return QueryResult(type="answer", route=route, content=content, chunks=chunks)
+
+    # 5) Ambiguous price/date/term question → clarification (no LLM call).
     if is_ambiguous(question):
         candidates = retriever.candidates_for(question, top_k=settings.top_k)
         if candidates:
@@ -243,7 +251,7 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
                 candidates=candidates,
             )
 
-    # 5) Aggregation question → explicit limitation until the SQL path exists.
+    # 6) Aggregation question → explicit limitation until the SQL path exists.
     if is_aggregation(question):
         chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
         chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
@@ -261,7 +269,7 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
             type="answer", route="RAG", content=answer, chunks=chunks
         )
 
-    # 6) Default: grounded RAG answer.
+    # 7) Default: grounded RAG answer.
     chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
     chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
     if refusal:

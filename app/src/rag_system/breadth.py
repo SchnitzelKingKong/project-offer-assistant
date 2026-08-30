@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 
+from .citation_markup import _format_date
 from .config import settings
 from .llm import comparison_line, comparison_reduce, extract_offer_facts
 from .retriever import Retriever, RetrievedChunk
@@ -31,6 +32,8 @@ COMPARISON_RE = re.compile(
     r"unterschiedlich|nebeneinander)\b",
     re.IGNORECASE,
 )
+YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+OFFER_WORD_RE = re.compile(r"\b(angebot|angebote)\b", re.IGNORECASE)
 
 
 def is_statistics(question: str) -> bool:
@@ -41,6 +44,55 @@ def is_statistics(question: str) -> bool:
 def is_comparison(question: str) -> bool:
     """Cross-offer comparison → map-reduce over topic retrieval."""
     return bool(COMPARISON_RE.search(question))
+
+
+def is_year_question(question: str) -> bool:
+    """Year-list question ("Welche Angebote sind im Jahr 2024?").
+
+    A year plus an offer word → the answer is a complete list from the
+    index metadata, not a top-k retrieval. Questions about a single
+    aspect of a year ("Wie hoch war der Preis im Jahr 2024?") do NOT
+    match — they stay on the aggregation/statistics routes.
+    """
+    return bool(YEAR_RE.search(question) and OFFER_WORD_RE.search(question))
+
+
+# ----------------------------------------------------------------------
+# Year list: deterministic metadata scan (no LLM, no retrieval)
+# ----------------------------------------------------------------------
+
+
+def year_route(retriever: Retriever, question: str) -> tuple[str, str, list]:
+    """List every offer of a year from the index metadata.
+
+    Deterministic breadth answer: the ``datum`` metadata of every offer
+    in the index is scanned, so the list is complete by construction —
+    no retrieval, no top-k cap, no LLM.
+    """
+    year = YEAR_RE.search(question).group(0)
+    by_offer = retriever.all_offer_chunks()
+    matches: list[tuple[str, str]] = []
+    for offer_id, chunks in by_offer.items():
+        datum = str((chunks[0].metadata or {}).get("datum") or "")
+        if datum.startswith(year):
+            matches.append((offer_id, datum))
+    matches.sort(key=lambda t: t[1], reverse=True)
+    if not matches:
+        return (
+            "Breadth",
+            f"Kein Angebot aus dem Jahr {year} ist im Index vorhanden "
+            f"(vollständiger Scan über {len(by_offer)} Angebote).",
+            [],
+        )
+    lines = " · ".join(
+        f"{offer_id} ({_format_date(datum) or datum})" for offer_id, datum in matches
+    )
+    content = (
+        f"Im Index sind **{len(matches)} Angebote** aus dem Jahr {year} "
+        f"(vollständiger Scan über alle {len(by_offer)} Angebote, kein "
+        f"Retrieval): {lines}."
+    )
+    return "Breadth", content, []
 
 
 # ----------------------------------------------------------------------

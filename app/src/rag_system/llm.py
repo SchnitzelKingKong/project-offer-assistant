@@ -34,11 +34,14 @@ REGELN:
 2. Jede konkrete Aussage (Preis, Datum, Zahlungsbedingung, Formulierung) muss
    einem konkreten Angebot zugeordnet sein. Zitiere inline als AG#### —
    OHNE eckige Klammern, direkt nach der zugehörigen Aussage.
-3. Belege WÖRTLICH: Führe die entscheidende Passage exakt so an, wie sie im
-   Kontext steht, in deutschen Anführungszeichen („…"). Das Citation-Schema
-   steht NACH dem Zitat — nicht im Satz:
+3. Wörtliche Zitate nur, wenn sie etwas beitragen: Bei exakten
+   Formulierungen, Konditionen oder umstrittenen Aussagen führe die
+   entscheidende Passage exakt so an, wie sie im Kontext steht, in
+   deutschen Anführungszeichen („…"). Bei einfachen Fakten reicht die
+   Paraphrase mit Citation — nicht jede Antwort braucht ein wörtliches
+   Zitat. Das Citation-Schema steht NACH dem Zitat — nicht im Satz:
    "Wörtlich heißt es: „Zahlungsziel: 14 Tage ab Rechnungsdatum." AG0085"
-   (die Seite und das Datum des Dokuments ergänzt die App automatisch).
+   (Datum, Bindestrich und Seitenzahl ergänzt die App automatisch).
 4. Zitiere jede Quelle pro Aussage NUR EINMAL — nicht im Satz UND nochmal am
    Satzende, und nicht am Ende eines Satzes UND nochmal am Anfang des
    nächsten. Ein Satz, der bereits mit AG#### belegt ist, braucht keine
