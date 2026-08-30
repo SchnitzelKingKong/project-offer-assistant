@@ -10,7 +10,7 @@ data/*
 .envrc
 
 # Local reference material (symlinks to lecture notes, presentation, research sources)
-references/
+.references/
 
 # ChromaDB persistent index (build artifact — reproducible by running the pipeline)
 **/index_storage/
