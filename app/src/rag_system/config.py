@@ -17,6 +17,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # .env, the .env.example values apply as-is.
 load_dotenv(_REPO_ROOT / ".env.example")
 load_dotenv(_REPO_ROOT / ".env", override=True)
+# Secrets layer (outside the repo, never committed, chmod 600): highest
+# priority. Keeps API keys out of the workspace so external agents with
+# repo access cannot read them.
+load_dotenv(Path.home() / ".config" / "rag-quote-history" / "secrets.env", override=True)
 
 # Local-development index override (user-approved 2026-08-30): while the
 # submission pipeline still ships the fictitious demo index, the app can be
