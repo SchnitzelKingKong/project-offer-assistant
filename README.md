@@ -104,50 +104,7 @@ setup, and how to run the notebooks (01 → 05).
 
 ### Data journey
 
-```mermaid
-flowchart TB
-    subgraph INGEST["Ingestion — offline, run once"]
-        direction TB
-        PDF["Multi-page, heterogeneous PDFs"]
-        NORM["Normalized raw text"]
-        RED["Redacted text<br/>(PII removed)"]
-        EXT["Extraction<br/>(structured facts + metadata)"]
-        EMB["Chunking + embedding"]
-        SDB[("Facts DB<br/>(SQLite)")]
-        PAD["offline batch job"]:::pad
-        PDF --> NORM --> RED --> EXT
-        EXT -->|"facts: id, date, price"| SDB
-        EXT -->|"text chunks + metadata"| EMB
-        EXT ~~~ PAD
-    end
-
-    EMB --> VDB[("Vector DB")]
-
-    subgraph QUERY["Query — at runtime"]
-        direction TB
-        Q["Natural-language question"]
-        EMBQ["Embedding model"]
-        BM25["Keyword index (BM25)<br/>built at runtime from the vector DB"]
-        RET["Retrieval layer<br/>(fuses both result lists)"]
-        LLM["LLM<br/>(answer generation)"]
-        APP["App: answer with citations"]
-        Q --> EMBQ
-        BM25 -->|"keyword hits"| RET
-        RET -->|"top chunks"| LLM
-        LLM --> APP
-    end
-
-    EMBQ -->|"semantic search"| VDB
-    VDB -->|"vector hits"| RET
-    VDB -->|"chunk corpus"| BM25
-
-    VDB ~~~ Q
-
-    classDef pad fill:none,stroke:none,color:transparent
-    style INGEST fill:#f0f7ff,stroke:#4a90d9,stroke-width:1px
-    style QUERY fill:#fff4e6,stroke:#e8a33d,stroke-width:1px
-    style VDB fill:#ffffff,stroke:#999999,stroke-width:1px
-```
+![The data journey: ingestion pipeline (offline) and query path (runtime) around the vector DB](docs/data-journey.svg)
 
 <em>Figure 1: The data journey — from offer PDF to cited answer. Ingestion runs once (offline); the query path runs at runtime.</em>
 

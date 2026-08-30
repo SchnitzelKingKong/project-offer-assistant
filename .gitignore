@@ -27,6 +27,9 @@ data/db/
 .claude/
 AGENTS.md
 
+# Diagram sources (rendered SVG/PNG are committed instead)
+*.drawio
+
 .DS_Store
 
 # --- Python (from github/gitignore: Python.gitignore) ------------------------
