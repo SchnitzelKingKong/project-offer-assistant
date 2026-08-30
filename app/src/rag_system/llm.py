@@ -405,12 +405,15 @@ DRAFT_MAP_PROMPT = (
     "Extrahiere NUR Bausteine, die explizit im Text stehen. Antworte NUR "
     "mit einem JSON-Objekt dieser Form:\n"
     '{"positions": [{"position": string, "menge": string, "satz_eur": number|null, '
-    '"betrag_eur": number|null}], '
+    '"betrag_eur": number|null, "korrupt": boolean}], '
     '"zahlungsbedingungen": string|null, "abnahme": string|null, '
     '"lieferformate": [string], "revisionen": string|null}\n'
     "Regeln:\n"
     "- positions: alle Leistungspositionen mit Menge, Einzelsatz und Betrag, "
     "wie im Angebot ausgewiesen (Sätze in EUR netto).\n"
+    "- Korrupte oder redigierte Positionsnamen (z. B. '[ADRESSE_REDACTED]') "
+    "TROTZDEM als Position mit Menge/Satz/Betrag aufnehmen, den Namen als "
+    "'Position (Name unlesbar)' setzen und 'korrupt': true flaggen.\n"
     "- zahlungsbedingungen: Zahlungsziel, Skonto, Raten — kurze Wiedergabe.\n"
     "- abnahme: Abnahme-Klausel — kurze Wiedergabe.\n"
     "- lieferformate: genannte Dateiformate/Container (z. B. MXF, MP4, ProRes).\n"
@@ -469,6 +472,10 @@ DRAFT_REDUCE_PROMPT = (
     "- Übernimm nur Bausteine, die zur neuen Anfrage passen. Passt nichts, "
     "schreibe das ehrlich in einem Satz.\n"
     "- Erfinde keine Sätze, die nicht in den Bausteinen stehen.\n"
+    "- Positionen mit 'korrupt': true kennzeichne als 'Position (Name "
+    "unlesbar)' und erwähne, dass der Positionsnamen im historischen Angebot "
+    "korrupt/redigiert ist. Weicht die Summe dadurch vom Nettobetrag des "
+    "Quellangebots ab, erwähne das in einem Satz beim Richtpreis.\n"
     "- Schreibe NUR das Endergebnis — keine Zwischenschritte, keine "
     "Korrekturen, keine 'Erneute Prüfung'. Rechne einmal sauber durch."
 )
