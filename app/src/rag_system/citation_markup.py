@@ -99,25 +99,41 @@ def page_of_quote(chunk_text: str, quote: str) -> int | None:
     return pages[-1] if pages else 1
 
 
+def _format_date(value) -> str | None:
+    """ISO date (``2026-05-01``) → German format (``01.05.2026``)."""
+    if not value:
+        return None
+    parts = str(value).split("-")
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        y, m, d = parts
+        return f"{d}.{m}.{y}"
+    return str(value)
+
+
 def upgrade_citations(content: str, chunks: list) -> str:
-    """Append the page to citations that directly follow a verbatim quote:
-    ``AG0085`` → ``AG0085, Seite 4`` (and ``[AG0085]`` → ``AG0085, Seite 4``).
+    """Append page and date to citations that directly follow a verbatim
+    quote: ``AG0085`` → ``AG0085, Seite 4 vom 01.05.2026`` (and
+    ``[AG0085]`` → same).
 
     For each citation the nearest preceding verbatim quote (``„…"``) is
     located in that offer's chunk texts; the page comes from the page
-    markers inside the chunk. Deterministic — no LLM. Citations that cannot
-    be resolved, or that are not directly after a quote (e.g. the trailing
+    markers inside the chunk, the date from the chunk metadata
+    (``datum``). Deterministic — no LLM. Citations that cannot be
+    resolved, or that are not directly after a quote (e.g. the trailing
     source list), are left as plain ``AG####``.
 
     ``chunks`` is the list of ``RetrievedChunk`` objects the answer was
-    grounded on (``.source`` = offer id, ``.text`` = chunk text).
+    grounded on (``.source`` = offer id, ``.text`` = chunk text,
+    ``.metadata`` = offer metadata incl. ``datum``).
     """
     quotes = [(m.end(), m.group(1).strip()) for m in QUOTE_RE.finditer(content)]
     if not quotes:
         return content
     texts: dict[str, list[str]] = {}
+    dates: dict[str, str | None] = {}
     for chunk in chunks:
         texts.setdefault(chunk.source, []).append(chunk.text)
+        dates.setdefault(chunk.source, _format_date(chunk.metadata.get("datum")))
     pairs: list[tuple[re.Match, str]] = []
     for m in CITE_RE.finditer(content):
         offer_id = m.group(2) or m.group(3)
@@ -137,7 +153,11 @@ def upgrade_citations(content: str, chunks: list) -> str:
             if page:
                 break
         if page:
-            pairs.append((m, f"{offer_id}, Seite {page}"))
+            repl = f"{offer_id}, Seite {page}"
+            date = dates.get(offer_id)
+            if date:
+                repl += f" vom {date}"
+            pairs.append((m, repl))
     # Replace from the end so earlier positions stay valid.
     for m, repl in reversed(pairs):
         content = content[: m.start()] + repl + content[m.end():]

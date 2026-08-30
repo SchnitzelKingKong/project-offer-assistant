@@ -73,7 +73,10 @@ def test_lists_are_rendered():
 
 
 def _chunk(text: str, source: str = "AG0001") -> RetrievedChunk:
-    return RetrievedChunk(text=text, source=source, score=0.5, metadata={})
+    return RetrievedChunk(
+        text=text, source=source, score=0.5,
+        metadata={"datum": "2026-05-01"},
+    )
 
 
 def test_page_of_quote_finds_last_marker_before_quote():
@@ -99,18 +102,29 @@ def test_page_of_quote_normalizes_whitespace_and_quotes():
     assert page_of_quote(text, "Lieferung in 10 Werktagen.") == 2
 
 
-def test_upgrade_citations_appends_page():
+def test_upgrade_citations_appends_page_and_date():
     chunk = _chunk("[Seite 1 von 4] Kopf\n[Seite 2 von 4] Zahlung 14 Tage netto.")
     content = "Wörtlich heißt es in AG0001: \u201eZahlung 14 Tage netto.\u201c AG0001"
     upgraded = upgrade_citations(content, [chunk])
+    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+
+
+def test_upgrade_citations_without_date_metadata():
+    chunk = RetrievedChunk(
+        text="[Seite 2 von 4] Zahlung 14 Tage netto.",
+        source="AG0001", score=0.5, metadata={},
+    )
+    content = "Wörtlich: \u201eZahlung 14 Tage netto.\u201c AG0001"
+    upgraded = upgrade_citations(content, [chunk])
     assert "AG0001, Seite 2" in upgraded
+    assert "vom" not in upgraded
 
 
 def test_upgrade_citations_bracketed_id_becomes_plain_with_page():
     chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
     content = "Wörtlich: \u201eZahlung 14 Tage netto.\u201c [AG0001]"
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2" in upgraded
+    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
     assert "[AG0001]" not in upgraded
 
 
@@ -141,5 +155,5 @@ def test_upgrade_citations_leaves_trailing_source_list_plain():
         "Quellen: AG0001, AG0002"
     )
     upgraded = upgrade_citations(content, [chunk])
-    assert "AG0001, Seite 2" in upgraded
+    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
     assert "Quellen: AG0001, AG0002" in upgraded  # untouched
