@@ -54,8 +54,10 @@ PRICE_TOPIC_RE = re.compile(
 )
 
 # Aggregation signals — structurally impossible with top-k vector search.
+# "welche" only counts when it asks for offers ("welche angebote"); a bare
+# "welche" ("welche Formate …") is a normal RAG question.
 AGGREGATION_RE = re.compile(
-    r"\b(welche|alle|wie viele|mehr als|mindestens|&gt;|gr[oö]ßer als|"
+    r"\b(welche\s+angebote|alle|wie viele|mehr als|mindestens|&gt;|gr[oö]ßer als|"
     r"groesser als|teurer als|g[uü]nstiger als|im jahr|in dem jahr)\b",
     re.IGNORECASE,
 )

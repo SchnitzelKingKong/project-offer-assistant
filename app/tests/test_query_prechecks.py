@@ -39,6 +39,14 @@ def test_no_aggregation_for_single_offer_question():
     assert not is_aggregation("Wie hoch war der Nettobetrag des Angebots AG0085?")
 
 
+def test_no_aggregation_for_bare_welche():
+    # "welche Formate …" is a normal RAG question, not an aggregation.
+    assert not is_aggregation(
+        "Wie ist die Abnahme geregelt und welche Formate werden geliefert?"
+    )
+    assert is_aggregation("Welche Angebote sind im Jahr 2024?")
+
+
 def test_price_question_detected():
     assert is_price_question("Wie hoch war der Preis? (gemeint ist Angebot AG0086)")
     assert is_price_question("Was war der Nettobetrag von AG0085?")
