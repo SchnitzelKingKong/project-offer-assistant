@@ -1,18 +1,18 @@
 """
-PII Sanitizer für die Angebotspipeline.
+PII Sanitizer for the offer pipeline.
 
-Angelehnt an den Security-Abschnitt des freeCodeCamp-Kurses
+Based on the security section of the freeCodeCamp course
 ("Production RAG with LangChain & Vector Databases"):
-- Regex-basierte PII-Erkennung (deterministisch, testbar, kein extra Modell)
-- detect()  → listet, was gefunden wurde (für Logging/Evaluation)
-- mask()    → ersetzt durch Redaction-Marker (für den Ingest)
+- Regex-based PII detection (deterministic, testable, no extra model)
+- detect()  → lists what was found (for logging / evaluation)
+- mask()    → replaces with redaction markers (for ingestion)
 
-WICHTIG: Läuft VOR Chunking/Embedding — Kundendaten dürfen weder in
-die SQLite-Tabelle noch in den Vektorindex.
+IMPORTANT: runs BEFORE chunking / embedding — customer data must never
+end up in the SQLite table or the vector index.
 
-Deutsche Anpassungen: IBAN, deutsche Telefonnummern, E-Mail,
-Kontonummer, BIC. Namen/Adressen sind Regex-unscharf → optional
-per LLM nachfassen (siehe Notebook).
+German-specific patterns: IBAN, German phone numbers, email,
+account number, BIC. Names / addresses are fuzzy for regex → optionally
+follow up with an LLM pass (see notebook).
 """
 
 import re
@@ -21,53 +21,53 @@ from dataclasses import dataclass, field
 
 @dataclass
 class PIIReport:
-    """Was wurde gefunden? (für Golden-Set-Evaluation des Sanitizers)"""
+    """What was found? (for golden-set evaluation of the sanitizer)"""
     found: dict = field(default_factory=dict)   # {"email": 2, "iban": 1, ...}
     masked_text: str = ""
 
     def summary(self) -> str:
         if not self.found:
-            return "Keine PII gefunden"
+            return "No PII found"
         parts = [f"{k}={v}" for k, v in self.found.items()]
         return ", ".join(parts)
 
 
-# --- PII-Patterns (Regex) ---
-# Reihenfolge ist wichtig: IBAN/Kontonummer VOR generischer Zahlenerkennung.
+# --- PII patterns (regex) ---
+# Order matters: IBAN / account number BEFORE generic number detection.
 PII_PATTERNS: dict[str, re.Pattern] = {
-    # IBAN: DE + 20 weitere Stellen (2 Prüfziffern + 18 Kontostellen),
-    # mit oder ohne Leerzeichen. MUSS vor ust_id laufen (DE + 9 Ziffern wäre Teilmenge).
+    # IBAN: DE + 20 further digits (2 check digits + 18 account digits),
+    # with or without spaces. MUST run before ust_id (DE + 9 digits is a subset).
     "iban": re.compile(r"\bDE\d{2}(?:\s?\d){18}\b"),
-    # BIC: exakt 8 oder 11 Zeichen (4 Bank + 2 Land + 2 Ort [+ 3 Filiale]).
-    # WICHTIG: nur mit Label-Kontext ("BIC:" / "SWIFT") erkennen. Ein reines
-    # Buchstaben-Pattern würde deutsche Großwörter wie "LEISTUNGEN" oder
-    # "BEDINGUNGEN" (8-11 Zeichen) fälschlich als BIC maskieren und den
-    # Angebots-Text im Index korruptieren. Die Gruppen: (1)=Label, (2)=Trenner,
-    # (3)=BIC-Code. mask() ersetzt nur Gruppe 3 und behält Label+Trenner.
+    # BIC: exactly 8 or 11 characters (4 bank + 2 country + 2 location [+ 3 branch]).
+    # IMPORTANT: only detect with label context ("BIC:" / "SWIFT"). A bare
+    # letter pattern would falsely mask German all-caps words like "LEISTUNGEN"
+    # or "BEDINGUNGEN" (8-11 characters) as BICs and corrupt the offer text
+    # in the index. Groups: (1)=label, (2)=separator, (3)=BIC code.
+    # mask() replaces only group 3 and keeps label + separator.
     "bic": re.compile(
         r"\b(BIC|SWIFT)(\s*[:.]?\s*)([A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?)\b"
     ),
     # E-Mail
     "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
-    # Deutsche Telefonnummern: +49 / 0049 / 0 voran, 6-20 Zeichen danach.
-    # (?<!\d) statt \b: verhindert, dass eine 0 mitten in einer anderen Zahl
-    # (z.B. PLZ "22607" oder Hausnummer "208") als Vorwahl matcht.
-    # [ \t] statt \s: verhindert Matches ueber Zeilenumbrueche hinweg
-    # (z.B. "Straße 208\n22607 Hamburg" war frueher ein False Positive).
+    # German phone numbers: +49 / 0049 / 0 prefix, 6-20 characters after.
+    # (?<!\d) instead of \b: prevents a 0 in the middle of another number
+    # (e.g. postal code "22607" or house number "208") from matching as a prefix.
+    # [ \t] instead of \s: prevents matches across line breaks
+    # (e.g. "Straße 208\n22607 Hamburg" used to be a false positive).
     "phone": re.compile(
         r"(?<!\d)(?:\+49|0049|0)[ \t]?[\d \t\-()]{6,20}\d\b"
     ),
-    # USt-IdNr: DE + 9 Ziffern, mit oder ohne Leerzeichen (z.B. "DE 111 222 333").
-    # Das \b nach der 9. Ziffer schützt vor Teil-Matches in IBANs (DE + 20 Ziffern),
-    # die vorher gelaufen sind.
+    # VAT ID (USt-IdNr): DE + 9 digits, with or without spaces (e.g. "DE 111 222 333").
+    # The \b after the 9th digit protects against partial matches inside IBANs
+    # (DE + 20 digits), which ran earlier.
     "ust_id": re.compile(r"\bDE(?:\s?\d){9}\b"),
-    # Steuernummer: XX/XXX/XXXXX (z.B. "00/000/00000")
+    # Tax number (Steuernummer): XX/XXX/XXXXX (e.g. "00/000/00000")
     "steuer_nr": re.compile(r"\b\d{2}/\d{3}/\d{5}\b"),
-    # Straße + Hausnummer (z.B. "Caprivistr. 11", "Baron-Voght-Straße 208",
-    # "Dreiecksplatz 7", "Westendstraße 49a"). Fangt Abkürzungen (str.),
-    # Bindestrich-Namen und Buchstaben-Zusätze (2a). PLZ/Ort-Zeilen bleiben
-    # unangetastet (kein Straßennamen-Wort) — die Redaktions-Policy behält
-    # die Kunden-PLZ/Ort bewusst bei.
+    # Street + house number (e.g. "Caprivistr. 11", "Baron-Voght-Straße 208",
+    # "Dreiecksplatz 7", "Westendstraße 49a"). Catches abbreviations (str.),
+    # hyphenated names and letter suffixes (2a). Postal-code/city lines are
+    # left untouched (no street-name word) — the redaction policy keeps the
+    # customer's postal code / city on purpose.
     "street": re.compile(
         r"\b[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-]*"
         r"(?:straße|str\.?|weg|platz|allee|ring|gasse|hof|kamp|damm|feld|garten|pfad|chaussee|bogen|markt)"
@@ -76,7 +76,7 @@ PII_PATTERNS: dict[str, re.Pattern] = {
     ),
 }
 
-# Marker, die mask() einsetzt
+# Markers used by mask()
 MASK_MAP: dict[str, str] = {
     "iban": "[IBAN_REDACTED]",
     "bic": "[BIC_REDACTED]",
@@ -88,9 +88,9 @@ MASK_MAP: dict[str, str] = {
     "street": "[ADRESSE_REDACTED]",
 }
 
-# Maskierungs-Reihenfolge: spezifische Muster zuerst, das generische
-# Phone-Pattern zuletzt. IBAN (DE+20) vor USt-IdNr (DE+9) vor Phone,
-# damit keine Teilmenge von einem breiteren Pattern "aufgefressen" wird.
+# Masking order: specific patterns first, the generic phone pattern last.
+# IBAN (DE+20) before VAT ID (DE+9) before phone, so no subset gets
+# "eaten" by a broader pattern.
 MASK_ORDER: list[str] = [
     "iban",
     "ust_id",
@@ -103,15 +103,15 @@ MASK_ORDER: list[str] = [
 
 
 class PIISanitizer:
-    """Detect + mask PII in Text. Deterministisch, nur Regex."""
+    """Detect + mask PII in text. Deterministic, regex only."""
 
     def detect(self, text: str) -> dict[str, list[str]]:
-        """Gibt alle gefundenen PII-Instanzen pro Kategorie zurück."""
+        """Return all PII instances found, per category."""
         found: dict[str, list[str]] = {}
         for category, pattern in PII_PATTERNS.items():
             if category == "bic":
-                # BIC-Pattern hat 3 Gruppen (Label, Trenner, Code) → nur den
-                # Code (Gruppe 3) als Instanz zählen.
+                # The BIC pattern has 3 groups (label, separator, code) →
+                # only count the code (group 3) as an instance.
                 matches = [m.group(3) for m in pattern.finditer(text)]
             else:
                 matches = pattern.findall(text)
@@ -120,20 +120,19 @@ class PIISanitizer:
         return found
 
     def mask(self, text: str) -> PIIReport:
-        """Ersetzt alle PII-Instanzen durch Redaction-Marker.
+        """Replace all PII instances with redaction markers.
 
-        Die Reihenfolge ist wichtig: spezifische Muster (IBAN, USt-IdNr)
-        müssen VOR dem generischen Phone-Pattern laufen. Sonst frisst das
-        Phone-Pattern Ziffernfolgen, die zu einer USt-IdNr gehören
-        (z.B. die "000000001" in "DE000000001") und maskt sie als
-        [PHONE_REDACTED] statt [USTID_REDACTED].
+        Order matters: specific patterns (IBAN, VAT ID) must run BEFORE the
+        generic phone pattern. Otherwise the phone pattern eats digit runs
+        that belong to a VAT ID (e.g. the "000000001" in "DE000000001") and
+        masks them as [PHONE_REDACTED] instead of [USTID_REDACTED].
         """
         masked = text
         counts: dict[str, int] = {}
         for category in MASK_ORDER:
             pattern = PII_PATTERNS[category]
             if category == "bic":
-                # Nur den BIC-Code (Gruppe 3) ersetzen, Label+Trenner behalten.
+                # Replace only the BIC code (group 3), keep label + separator.
                 def _bic_repl(m: re.Match) -> str:
                     return f"{m.group(1)}{m.group(2)}{MASK_MAP['bic']}"
                 masked, n = pattern.subn(_bic_repl, masked)
@@ -145,7 +144,7 @@ class PIISanitizer:
 
 
 if __name__ == "__main__":
-    # Quick-Selbsttest (nur fiktive Werte — keine echte PII im Repo)
+    # Quick self-test (fictitious values only — no real PII in the repo)
     sample = (
         "Kunde: Max Mustermann, max@mustermann-film.de, Tel. +49 171 2345678\n"
         "Zahlung auf IBAN DE00 1234 5678 0000 0000 01, BIC: TESTDEFFXXX\n"
@@ -157,6 +156,6 @@ if __name__ == "__main__":
     )
     s = PIISanitizer()
     report = s.mask(sample)
-    print("Gefunden:", report.summary())
-    print("--- Maskierter Text ---")
+    print("Found:", report.summary())
+    print("--- Masked text ---")
     print(report.masked_text)
