@@ -218,8 +218,15 @@ class Retriever:
         hyde_results: list[RetrievedChunk] | None = None
         if hyde_passage:
             hyde_results = self.query(hyde_passage, top_k=top_n, angebot_id=angebot_id)
+        # With the HyDE arm active the base arms are re-weighted (0.4/0.3/0.3)
+        # so all three arms sum to 1.0 — see notebooks/05.
         return self.rrf_fuse(
-            vec_results, bm25_results, top_n=top_n, hyde_results=hyde_results
+            vec_results,
+            bm25_results,
+            top_n=top_n,
+            hyde_results=hyde_results,
+            w_vec=settings.rrf_w_vec_hyde if hyde_passage else None,
+            w_bm25=settings.rrf_w_bm25_hyde if hyde_passage else None,
         )
 
     def candidates_for(self, question: str, top_k: int | None = None) -> list[dict]:
@@ -244,6 +251,34 @@ class Retriever:
                 }
             )
         return candidates
+
+    def all_offer_chunks(self) -> dict[str, list[RetrievedChunk]]:
+        """All chunks grouped by offer id — the complete corpus, no retrieval.
+
+        Used by the statistics route (full scan): breadth questions need
+        complete coverage, which top-k retrieval cannot provide by
+        construction.
+        """
+        if self._collection is None:
+            return {}
+        result = self._collection.get(include=["documents", "metadatas"])
+        by_offer: dict[str, list[RetrievedChunk]] = {}
+        for node_id, text, metadata in zip(
+            result["ids"], result["documents"], result["metadatas"]
+        ):
+            meta = metadata or {}
+            offer_id = meta.get("angebot_id")
+            if not offer_id:
+                continue
+            by_offer.setdefault(str(offer_id), []).append(
+                RetrievedChunk(
+                    text=text or "",
+                    source=str(offer_id),
+                    score=0.0,
+                    metadata=meta,
+                )
+            )
+        return by_offer
 
     def get_offer(self, angebot_id: str) -> dict | None:
         """Full details for one offer, for the offer detail panel.

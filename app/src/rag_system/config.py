@@ -70,6 +70,14 @@ class Settings:
     # (retrieval failure mode #2). Off by default; costs one extra LLM call.
     hyde_enabled: bool = os.getenv("HYDE_ENABLED", "0") == "1"
     rrf_w_hyde: float = float(os.getenv("RRF_W_HYDE", "0.3"))
+    # When the HyDE arm is active the two base arms are re-weighted so all
+    # three arms sum to 1.0 (0.4/0.3/0.3, see notebooks/05).
+    rrf_w_vec_hyde: float = float(os.getenv("RRF_W_VEC_HYDE", "0.4"))
+    rrf_w_bm25_hyde: float = float(os.getenv("RRF_W_BM25_HYDE", "0.3"))
+
+    # Breadth routes (notebooks/05): the comparison map-reduce caps the
+    # number of offers mapped per question.
+    comparison_top_offers: int = int(os.getenv("COMPARISON_TOP_OFFERS", "15"))
 
     # LLM rerank (top_n → top_k, 0–10 scores) + refusal gate
     rerank_enabled: bool = os.getenv("RERANK_ENABLED", "1") == "1"

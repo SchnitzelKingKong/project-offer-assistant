@@ -4,10 +4,15 @@ Implements the response contract from the handoff (§3.3):
 
 - ``AG####`` reference in the question  → metadata-filtered retrieval.
   If the filter returns nothing → "not found", no unfiltered fallback.
+- Statistics words ("wie viele", "durchschnitt", "ausreißer", …)
+  → full scan: LLM reads every offer (map → JSON facts), deterministic
+  code reduces (count / mean / range / outliers). No retrieval, no top-k cap.
+- Comparison words ("vergleiche", "unterschiede", …)
+  → map-reduce over topic retrieval (one fact line per offer → comparison).
 - Price/date/term question without any offer reference or year
   → clarification with candidate chips (no LLM call).
-- Aggregation words ("welche", "alle", "wie viele", "mehr als X €",
-  "im Jahr Y") → explicit limitation until the SQL path exists.
+- Aggregation words ("welche", "alle", "mehr als X €", "im Jahr Y")
+  → explicit limitation until the SQL path exists.
 - Everything else → grounded RAG answer.
 """
 
@@ -16,6 +21,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .breadth import (
+    comparison_route,
+    is_comparison,
+    is_statistics,
+    statistics_route,
+)
 from .config import settings
 from .llm import generate_answer, hyde_passage, rerank
 from .retriever import Retriever, RetrievedChunk
@@ -198,7 +209,21 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
             chunks=chunks,
         )
 
-    # 2) Ambiguous price/date/term question → clarification (no LLM call).
+    # 2) Statistics (count/mean/outliers) → FULL SCAN + code reduce.
+    #    Checked BEFORE ambiguous/aggregation: "wie viele … Zahlungsziel"
+    #    would otherwise hit the clarification or RAG path.
+    if is_statistics(question):
+        route, content, chunks = statistics_route(retriever, question)
+        return QueryResult(type="answer", route=route, content=content, chunks=chunks)
+
+    # 3) Comparison (vergleiche/unterschiede) → map-reduce over topic retrieval.
+    if is_comparison(question):
+        route, content, chunks = comparison_route(
+            retriever, question, hyde_passage=_hyde_for(question)
+        )
+        return QueryResult(type="answer", route=route, content=content, chunks=chunks)
+
+    # 4) Ambiguous price/date/term question → clarification (no LLM call).
     if is_ambiguous(question):
         candidates = retriever.candidates_for(question, top_k=settings.top_k)
         if candidates:
@@ -218,7 +243,7 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
                 candidates=candidates,
             )
 
-    # 3) Aggregation question → explicit limitation until the SQL path exists.
+    # 5) Aggregation question → explicit limitation until the SQL path exists.
     if is_aggregation(question):
         chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
         chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
@@ -236,7 +261,7 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
             type="answer", route="RAG", content=answer, chunks=chunks
         )
 
-    # 4) Default: grounded RAG answer.
+    # 6) Default: grounded RAG answer.
     chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
     chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))
     if refusal:

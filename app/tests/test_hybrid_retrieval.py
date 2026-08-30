@@ -34,6 +34,30 @@ def test_rrf_fuse_respects_top_n():
     assert len(fused) == 3
 
 
+def test_hybrid_search_uses_hyde_weights_when_hyde_active():
+    """With a HyDE passage the base arms are re-weighted to 0.4/0.3 (vec/bm25)
+    so all three arms sum to 1.0 (notebooks/05)."""
+    r = Retriever.__new__(Retriever)  # skip __init__ (no index needed)
+    a, b = _chunk("alpha"), _chunk("beta")
+    with patch.object(r, "query", return_value=[a, b]), \
+         patch.object(r, "bm25_search", return_value=[b, a]):
+        fused = r.hybrid_search("q", top_n=10, hyde_passage="hypothetical")
+    # alpha: vec rank 0 (0.4/61) + bm25 rank 1 (0.3/62) + hyde rank 0 (0.3/61)
+    expected = 0.4 / 61 + 0.3 / 62 + 0.3 / 61
+    assert abs(fused[0].metadata["rrf_score"] - expected) < 1e-9
+
+
+def test_hybrid_search_uses_default_weights_without_hyde():
+    r = Retriever.__new__(Retriever)
+    a, b = _chunk("alpha"), _chunk("beta")
+    with patch.object(r, "query", return_value=[a, b]), \
+         patch.object(r, "bm25_search", return_value=[b, a]):
+        fused = r.hybrid_search("q", top_n=10)
+    # alpha: vec rank 0 (0.5/61) + bm25 rank 1 (0.5/62), no hyde arm
+    expected = 0.5 / 61 + 0.5 / 62
+    assert abs(fused[0].metadata["rrf_score"] - expected) < 1e-9
+
+
 def test_rerank_orders_by_llm_scores():
     candidates = [_chunk(f"passage {i}") for i in range(1, 5)]
     fake_response = {

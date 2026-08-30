@@ -21,6 +21,7 @@ import time
 
 import ollama
 
+from .citation_markup import upgrade_citations
 from .config import settings
 from .retriever import RetrievedChunk
 
@@ -32,27 +33,30 @@ REGELN:
    Konditionen oder Formulierungen.
 2. Jede konkrete Aussage (Preis, Datum, Zahlungsbedingung, Formulierung) muss
    einem konkreten Angebot zugeordnet sein. Zitiere inline als [AG####].
-3. Vermische KEINE Daten aus verschiedenen Angeboten zu einer Antwort. Wenn du
+3. Belege WÖRTLICH: Führe die entscheidende Passage aus dem Kontext exakt so
+   an, wie sie dort steht, in deutschen Anführungszeichen („…"), und ordne sie
+   dem Chunk zu, der sie tatsächlich enthält.
+4. Vermische KEINE Daten aus verschiedenen Angeboten zu einer Antwort. Wenn du
    über mehrere Angebote vergleichst, nenne für jeden Wert das Angebot, aus dem
    er stammt.
-4. Wenn die Frage ein konkretes Angebot nennt (z.B. "AG0085") und dieses NICHT
+5. Wenn die Frage ein konkretes Angebot nennt (z.B. "AG0085") und dieses NICHT
    im Kontext ist: sage das klar ("AG0085 wurde nicht gefunden") und antworte
    nicht spekulativ.
-5. Wenn der Kontext die Frage nicht beantwortet: lehne ab in einem Satz
+6. Wenn der Kontext die Frage nicht beantwortet: lehne ab in einem Satz
    ("Das steht in den vorliegenden Angeboten nicht.") — keine Schätzung.
-6. Wenn die Frage mehrdeutig ist (z.B. "Wie hoch war der Preis?" ohne
+7. Wenn die Frage mehrdeutig ist (z.B. "Wie hoch war der Preis?" ohne
    Angebotsbezug): antworte NICHT. Stelle stattdessen eine kurze Rückfrage und
    liste die Kandidaten aus dem Kontext auf, z.B.:
    "Meinst du eines dieser Angebote? AG0085 (01.05.2026, 5.844,52 €) ·
    AG0086 (…, 8.160,80 €) · AG0090 (…, 1.251,03 €)"
-7. Antworte auf Deutsch. Struktur: zuerst die direkte Antwort (1–2 Sätze),
+8. Antworte auf Deutsch. Struktur: zuerst die direkte Antwort (1–2 Sätze),
    dann Details mit Zitaten, am Ende die Quellenliste.
-8. Der Index enthält insgesamt {offer_count} Angebote. Dein Kontext zeigt nur
+9. Der Index enthält insgesamt {offer_count} Angebote. Dein Kontext zeigt nur
    die ähnlichsten Treffer — behaupte niemals, der Index enthalte nur die im
    Kontext sichtbaren Angebote.
-9. Nenne Preise, Beträge oder Kosten NUR, wenn die Frage danach fragt.
-   Der Gesamtbetrag eines Angebots ist kein Beleg für den Preis eines
-   einzelnen Leistungspunkts — verwechsle beides nicht."""
+10. Nenne Preise, Beträge oder Kosten NUR, wenn die Frage danach fragt.
+    Der Gesamtbetrag eines Angebots ist kein Beleg für den Preis eines
+    einzelnen Leistungspunkts — verwechsle beides nicht."""
 
 CHAT_SYSTEM_PROMPT = """You are the Project Offer Assistant, an in-house
 assistant for project-based service providers. Be friendly and concise.
@@ -297,4 +301,84 @@ def generate_answer(
     response = _client().chat(
         model=settings.llm_model, messages=messages, think=False
     )
-    return response["message"]["content"] or ""
+    content = _strip_think(response["message"]["content"] or "").strip()
+    # Deterministic page lookup: [AG####] → [AG#### | S. X] where the model's
+    # verbatim quote can be located in the chunk text (notebooks/05).
+    return upgrade_citations(content, chunks)
+
+
+# =====================================================================
+# Breadth routes — LLM steps (statistics map, comparison map/reduce)
+# Ported from notebooks/05-retrieval-demo-full.ipynb.
+# =====================================================================
+
+FACTS_PROMPT = (
+    "Du liest ein Angebot eines Filmstudios. Extrahiere NUR Fakten, die "
+    "explizit im Text stehen. Antworte NUR mit einem JSON-Objekt dieser Form:\n"
+    '{"zahlungsziel_tage": int|null, "skonto_prozent": float|null, '
+    '"lieferzeit": string|null, "garantie": string|null, "leistungen": [string]}\n'
+    "Regeln:\n"
+    "- zahlungsziel_tage: Tage bis zur Zahlung (z. B. 14). 'netto 30 Tage' -> 30. "
+    "0 ist KEIN gültiger Wert. Wenn kein Zahlungsziel genannt wird, MUSS null "
+    "stehen (nicht 0, nicht 30 als Standard).\n"
+    "- skonto_prozent: Skontoprozent (z. B. 5.0), sonst null.\n"
+    "- lieferzeit: kurze Wiedergabe der Lieferfrist, sonst null.\n"
+    "- garantie: kurze Wiedergabe der Garantie, sonst null.\n"
+    "- leistungen: Liste der genannten Leistungen (z. B. 'Color Grading').\n\n"
+    "TEXT:\n{text}"
+)
+
+
+def extract_offer_facts(text: str) -> dict | None:
+    """MAP step of the statistics route: one LLM call per offer → structured
+    facts as a JSON dict. Returns ``None`` when the model produces no parseable
+    JSON after 3 attempts (the caller then skips the offer)."""
+    prompt = FACTS_PROMPT.replace("{text}", text[:12000])
+    for attempt in range(3):
+        try:
+            response = _client().chat(
+                model=settings.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                think=False,
+            )
+            raw = _strip_think(response["message"]["content"] or "")
+            match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+        except Exception:
+            pass
+        if attempt < 2:
+            time.sleep(0.5 * (attempt + 1))
+    return None
+
+
+def comparison_line(question: str, offer_id: str, text: str) -> str:
+    """MAP step of the comparison route: one fact line per offer."""
+    prompt = (
+        f"Zusammenfassung in EINER Zeile: Was sagt dieses Angebot zu: "
+        f"{question}\nText: {text[:2500]}\n"
+        f"Antworte NUR mit der Zeile, beginnend mit '{offer_id}: '"
+    )
+    response = _client().chat(
+        model=settings.llm_model,
+        messages=[{"role": "user", "content": prompt}],
+        think=False,
+    )
+    return _strip_think(response["message"]["content"] or "").strip()
+
+
+def comparison_reduce(question: str, lines: list[str]) -> str:
+    """REDUCE step of the comparison route: compare the per-offer fact lines."""
+    prompt = (
+        "Vergleiche die folgenden Zeilen zu den Angeboten und schreibe eine "
+        "kurze Vergleichszusammenfassung auf Deutsch. Zitiere nach jeder "
+        "Aussage die Angebots-ID in eckigen Klammern, z. B. [AG1001]. "
+        "Nenne Gemeinsamkeiten und Unterschiede. Kein externes Wissen.\n\n"
+        "ZEILEN:\n" + "\n".join(lines) + "\n\nVERGLEICH:"
+    )
+    response = _client().chat(
+        model=settings.llm_model,
+        messages=[{"role": "user", "content": prompt}],
+        think=False,
+    )
+    return _strip_think(response["message"]["content"] or "").strip()

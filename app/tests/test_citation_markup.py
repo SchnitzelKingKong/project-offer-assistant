@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from rag_system.citation_markup import render_answer_html
+from rag_system.citation_markup import (
+    page_of_quote,
+    render_answer_html,
+    upgrade_citations,
+)
+from rag_system.retriever import RetrievedChunk
 
 
 def test_bracketed_offer_id_becomes_chip():
@@ -62,3 +67,59 @@ def test_lists_are_rendered():
     assert "<ul>" in html
     assert "<li>" in html
     assert 'data-offer="AG0078"' in html
+
+
+# --- Page-level citations: [AG####] → [AG#### | S. X] ------------------------
+
+
+def _chunk(text: str, source: str = "AG0001") -> RetrievedChunk:
+    return RetrievedChunk(text=text, source=source, score=0.5, metadata={})
+
+
+def test_page_of_quote_finds_last_marker_before_quote():
+    text = (
+        "[Seite 1 von 4] Einleitung\n"
+        "[Seite 2 von 4] Zahlung innerhalb von 14 Tagen netto.\n"
+        "[Seite 3 von 4] Sonstiges"
+    )
+    assert page_of_quote(text, "Zahlung innerhalb von 14 Tagen netto.") == 2
+
+
+def test_page_of_quote_before_any_marker_is_page_1():
+    assert page_of_quote("[Seite 2 von 4] Text", "Text") == 2
+    assert page_of_quote("Kein Marker, nur Text", "Text") == 1
+
+
+def test_page_of_quote_not_found_returns_none():
+    assert page_of_quote("[Seite 1 von 2] Anderer Text", "nicht da") is None
+
+
+def test_page_of_quote_normalizes_whitespace_and_quotes():
+    text = "[Seite 2 von 3]   Lieferung   in   10   Werktagen."
+    assert page_of_quote(text, "Lieferung in 10 Werktagen.") == 2
+
+
+def test_upgrade_citations_appends_page():
+    chunk = _chunk("[Seite 1 von 4] Kopf\n[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = "Das Angebot sieht vor: \u201eZahlung 14 Tage netto.\u201c [AG0001]"
+    upgraded = upgrade_citations(content, [chunk])
+    assert "[AG0001 | S. 2]" in upgraded
+
+
+def test_upgrade_citations_without_quotes_unchanged():
+    chunk = _chunk("[Seite 1 von 4] Zahlung 14 Tage netto.")
+    content = "Kurzantwort ohne Zitat [AG0001]."
+    assert upgrade_citations(content, [chunk]) == content
+
+
+def test_upgrade_citations_unresolvable_quote_keeps_plain_citation():
+    chunk = _chunk("[Seite 1 von 4] Kompletlich anderer Text.")
+    content = "Behauptung: \u201eetwas anderes\u201c [AG0001]."
+    assert upgrade_citations(content, [chunk]) == content
+
+
+def test_upgrade_citations_ignores_other_offers_chunks():
+    other = _chunk("[Seite 5 von 9] Zahlung 14 Tage netto.", source="AG0002")
+    content = "Zitat: \u201eZahlung 14 Tage netto.\u201c [AG0001]."
+    # The quote only exists in AG0002's chunk → AG0001 citation stays plain.
+    assert upgrade_citations(content, [other]) == content

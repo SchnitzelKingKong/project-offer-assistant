@@ -46,3 +46,79 @@ def _chip_replacement(match: re.Match) -> str:
     """Build the chip anchor from whichever alternative matched."""
     offer_id = match.group(1) or match.group(2)
     return f'<a class="cite-chip" data-offer="{offer_id}" href="#">{offer_id}</a>'
+
+
+# --- Page-level citations: [AG####] → [AG#### | S. X] ------------------------
+# The model quotes the decisive passage verbatim (in „…"); the page is then
+# resolved DETERMINISTICALLY from the "[Seite X von Y]" markers inside the
+# chunk text. A quote that cannot be located verbatim never gets a page
+# (ported from notebooks/05).
+
+PAGE_RE = re.compile(r"\[Seite (\d+) von \d+\]")
+QUOTE_RE = re.compile(r"\u201e(.+?)\u201c", flags=re.DOTALL)
+CITE_RE = re.compile(r"\[(AG\d{4})(?:\s*\|[^\]]*)?\]")
+
+
+def _norm(s: str) -> str:
+    """Normalize whitespace + quote variants for robust quote matching."""
+    s = re.sub(r"\s+", " ", s)
+    for a, b in [
+        ("\u201e", '"'), ("\u201c", '"'), ("\u201d", '"'),
+        ("\u201a", "'"), ("\u2018", "'"), ("\u2019", "'"),
+        ("\u2026", "..."),
+    ]:
+        s = s.replace(a, b)
+    return s.strip()
+
+
+def page_of_quote(chunk_text: str, quote: str) -> int | None:
+    """Find the verbatim quote in the chunk text and return the number of the
+    LAST ``[Seite X von Y]`` marker before it.
+
+    Returns ``None`` when the quote cannot be located — a page is never
+    guessed.
+    """
+    nq, nt = _norm(quote), _norm(chunk_text)
+    pos = nt.find(nq)
+    if pos < 0:
+        return None
+    pages = [int(m.group(1)) for m in PAGE_RE.finditer(nt) if m.start() < pos]
+    return pages[-1] if pages else 1
+
+
+def upgrade_citations(content: str, chunks: list) -> str:
+    """Append the page to every resolvable citation: ``[AG####]`` →
+    ``[AG#### | S. X]``.
+
+    For each citation the nearest preceding verbatim quote (``„…"``) is
+    located in that offer's chunk texts; the page comes from the page
+    markers inside the chunk. Deterministic — no LLM. Citations that cannot
+    be resolved are left as ``[AG####]``.
+
+    ``chunks`` is the list of ``RetrievedChunk`` objects the answer was
+    grounded on (``.source`` = offer id, ``.text`` = chunk text).
+    """
+    quotes = [(m.start(), m.group(1).strip()) for m in QUOTE_RE.finditer(content)]
+    if not quotes:
+        return content
+    texts: dict[str, list[str]] = {}
+    for chunk in chunks:
+        texts.setdefault(chunk.source, []).append(chunk.text)
+    pairs: list[tuple[re.Match, str]] = []
+    for m in CITE_RE.finditer(content):
+        preceding = [q for p, q in quotes if p < m.start()]
+        if not preceding:
+            continue
+        quote = preceding[-1]
+        offer_id = m.group(1)
+        page = None
+        for text in texts.get(offer_id, []):
+            page = page_of_quote(text, quote)
+            if page:
+                break
+        if page:
+            pairs.append((m, f"[{offer_id} | S. {page}]"))
+    # Replace from the end so earlier positions stay valid.
+    for m, repl in reversed(pairs):
+        content = content[: m.start()] + repl + content[m.end():]
+    return content
