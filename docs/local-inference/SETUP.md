@@ -50,7 +50,7 @@ flowchart LR
 
 | Requirement | Notes |
 |---|---|
-| GPU machine | NVIDIA GPU (tensor parallelism) for a 27B model |
+| GPU machine | NVIDIA GPUx2 (tensor parallelism) for a 27B model |
 | CUDA + drivers | matching the vLLM build |
 | vLLM | installed in a dedicated venv (example below uses `/opt/vllm`) |
 | Model weights | `Qwen/Qwen3.8-27B-FP8` (Hugging Face) |

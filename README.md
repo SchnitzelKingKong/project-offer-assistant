@@ -57,7 +57,7 @@ notebooks (persisted to `data/db/chroma/`) and the app only reloads it via
 | Python | 3.11 (tested with 3.11.15) |
 | conda (or any env manager) | `conda create -n quote-rag python=3.11` |
 | Ollama | local, for embeddings (`nomic-embed-text`) — CPU is fine |
-| LLM endpoint | any OpenAI-compatible API: vLLM on a GPU machine (see [`docs/`](docs/README.md)) or Ollama local |
+| LLM endpoint | any OpenAI-compatible API: vLLM on a GPU machine (see [`docs/`](docs/OVERVIEW.md)) or Ollama local |
 | OS | macOS / Linux (developed on macOS) |
 
 No cloud accounts, no paid APIs. Everything runs on your own hardware / LAN.
@@ -107,8 +107,19 @@ setup, and how to run the notebooks (01 → 05).
 | LLM | Qwen 27B via vLLM (GPU) or Ollama (local) — OpenAI-compatible API |
 | Embeddings | `nomic-embed-text` via Ollama (local, CPU) |
 | Vector DB | ChromaDB, persistent on disk |
-| Framework | LlamaIndex |
+| Index pipeline | LlamaIndex (notebooks 01–03: chunking, documents, Chroma adapter) |
+| App (RAG logic) | hand-rolled, stateless — ChromaDB + BM25/RRF fusion, no framework at runtime |
 | Frontend | Streamlit |
+
+**Design decision: no framework at runtime.** LlamaIndex is used only to
+*build* the index (chunking, document model, Chroma adapter). The app itself
+is a small, stateless RAG system written from scratch — retrieval
+(ChromaDB + BM25 with RRF fusion), question routing, and answer generation
+are plain Python with direct `chromadb` / `ollama` / OpenAI-compatible API
+calls. This keeps the runtime dependency footprint small, avoids
+framework lock-in, and makes every stage (router, fusion, refusal gate)
+directly inspectable and testable. It is a deliberate choice that can be
+revisited later — see [`docs/OVERVIEW.md`](docs/OVERVIEW.md) for the outlook.
 
 ## Usage
 
