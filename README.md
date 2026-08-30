@@ -29,13 +29,22 @@ app/src/rag_system/       RAG logic (testable without the UI)
 ├── config.py             settings from .env
 ├── retriever.py          ChromaDB vector retrieval
 └── llm.py                answer generation (OpenAI-compatible endpoint)
-app/scripts/build_index.py  one-shot index build (PDF → chunk → embed → Chroma)
 app/tests/                pytest suite
+notebooks/                offer pipeline (PDF → sanitize → extract → index)
+source/offers/            fictitious sample offers + generator
+sanitizer.py              PII sanitizer (used by the pipeline)
 ```
 
-**Build-once, reload-later:** the vector index is built once by
-`app/scripts/build_index.py` and persisted to `app/.index_storage/`. The app
-only reloads it — never re-embeds at query time.
+**Build-once, reload-later:** the vector index is built once by the pipeline
+notebooks (persisted to `data/db/chroma/`) and the app only reloads it via
+`INDEX_DIR` in `.env` — never re-embeds at query time.
+
+## Pipeline
+
+The offer pipeline (PDF → sanitize → extract → index → retrieval demo) lives at
+the repository root: `notebooks/`, `source/offers/`, `sanitizer.py`, `data/`.
+See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout, setup,
+and how to run the notebooks (01 → 05).
 
 | Component | Choice |
 |---|---|
@@ -58,19 +67,21 @@ make install            # = pip install -r requirements.txt
 # 3. Configure
 cp .env.example .env    # then edit endpoints / model names
 
-# 4. Add source documents to data/ (PDFs)
+# 4. Add source documents to source/offers/ (PDFs)
+#    (10 fictitious sample offers are included)
 ```
 
 ## Usage
 
 ```bash
-make -C app index       # build the vector index from data/ (one-shot)
+# build the vector index: run notebooks/ 01 → 03 (see notebooks/PIPELINE.md)
 make -C app run         # start the app → http://localhost:8501
 make -C app test        # run the test suite
 ```
 
 ## Privacy
 
-- Source documents (`data/`), the index (`app/.index_storage/`) and `.env`
-  are git-ignored — real customer data never enters version control.
+- Unredacted texts (`data/raw/`), the index (`data/db/`) and `.env` are
+  git-ignored — real customer data never enters version control.
+- `data/redacted/` and `data/extracted/` contain only fictitious sample data.
 - All inference runs locally / on your own LAN.
