@@ -59,7 +59,9 @@ def _chip_replacement(match: re.Match) -> str:
 # plain, comma-separated overview.
 
 PAGE_RE = re.compile(r"\[Seite (\d+) von \d+\]")
-QUOTE_RE = re.compile(r"\u201e(.+?)\u201c", flags=re.DOTALL)
+# German quotes („…") — the model occasionally closes with a straight
+# double quote instead of ", so accept both closing variants.
+QUOTE_RE = re.compile(r"[\u201e\"](.+?)[\u201c\"]", flags=re.DOTALL)
 # Bracketed ids (legacy model output) or plain ids; never one that already
 # carries a page ("AG0085, Seite 4").
 CITE_RE = re.compile(

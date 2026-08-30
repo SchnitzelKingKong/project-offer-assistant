@@ -109,6 +109,22 @@ def test_upgrade_citations_appends_page_and_date():
     assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
 
 
+def test_upgrade_citations_citation_after_quote_not_in_sentence():
+    # New style: "Wörtlich heißt es: „…" AG0001" (id after the quote).
+    chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = "Wörtlich heißt es: \u201eZahlung 14 Tage netto.\u201c AG0001"
+    upgraded = upgrade_citations(content, [chunk])
+    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+
+
+def test_upgrade_citations_accepts_straight_closing_quote():
+    # The model sometimes closes with a straight " instead of ".
+    chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = 'Wörtlich heißt es in AG0001: \u201eZahlung 14 Tage netto." AG0001'
+    upgraded = upgrade_citations(content, [chunk])
+    assert "AG0001, Seite 2 vom 01.05.2026" in upgraded
+
+
 def test_upgrade_citations_without_date_metadata():
     chunk = RetrievedChunk(
         text="[Seite 2 von 4] Zahlung 14 Tage netto.",

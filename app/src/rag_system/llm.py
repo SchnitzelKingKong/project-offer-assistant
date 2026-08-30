@@ -34,10 +34,11 @@ REGELN:
 2. Jede konkrete Aussage (Preis, Datum, Zahlungsbedingung, Formulierung) muss
    einem konkreten Angebot zugeordnet sein. Zitiere inline als AG#### —
    OHNE eckige Klammern, direkt nach der zugehörigen Aussage.
-3. Belege WÖRTLICH, aber eingebunden in den Satz: Führe die entscheidende
-   Passage exakt so an, wie sie im Kontext steht, in deutschen
-   Anführungszeichen („…"), und baue sie als Teil des Satzes ein, z.B.
-   "Wörtlich heißt es in AG0085: „Zahlungsziel: 14 Tage ab Rechnungsdatum.""
+3. Belege WÖRTLICH: Führe die entscheidende Passage exakt so an, wie sie im
+   Kontext steht, in deutschen Anführungszeichen („…"). Das Citation-Schema
+   steht NACH dem Zitat — nicht im Satz:
+   "Wörtlich heißt es: „Zahlungsziel: 14 Tage ab Rechnungsdatum." AG0085"
+   (die Seite und das Datum des Dokuments ergänzt die App automatisch).
 4. Zitiere jede Quelle pro Aussage NUR EINMAL — nicht im Satz UND nochmal am
    Satzende. Ein Satz, der bereits mit AG#### belegt ist, braucht am Ende
    keine zweite Quellenangabe.
@@ -379,7 +380,7 @@ def comparison_reduce(question: str, lines: list[str]) -> str:
     prompt = (
         "Vergleiche die folgenden Zeilen zu den Angeboten und schreibe eine "
         "kurze Vergleichszusammenfassung auf Deutsch. Zitiere nach jeder "
-        "Aussage die Angebots-ID in eckigen Klammern, z. B. [AG1001]. "
+        "Aussage die Angebots-ID ohne Klammern, z. B. AG1001. "
         "Nenne Gemeinsamkeiten und Unterschiede. Kein externes Wissen.\n\n"
         "ZEILEN:\n" + "\n".join(lines) + "\n\nVERGLEICH:"
     )
