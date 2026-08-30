@@ -1,10 +1,50 @@
-# vLLM Setup (Sidequest)
+# Local Inference Setup (Sidequest)
 
-How to run the LLM endpoint for the Project Offer Assistant with vLLM on a
-GPU machine. The app and the notebooks only need an **OpenAI-compatible API**
-— vLLM provides one out of the box.
+How to run the LLM endpoint for the Project Offer Assistant with
+self-hosted inference. The app and the notebooks only need an
+**OpenAI-compatible API** — both vLLM (GPU) and Ollama (local) provide
+one out of the box.
 
-## What you need
+> **On-prem / own network:** everything runs inside **your own network**.
+> The vLLM server runs on a GPU machine in the office; the app and the
+> notebooks reach it over the LAN via its internal IP. No internet
+> connection, no cloud, no external API — all prompts, offers and
+> answers stay inside your network.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    subgraph LAN["Your own network (LAN)"]
+        subgraph APP["App machine (e.g. MacBook)"]
+            UI["Streamlit app<br/>localhost:8501"]
+            NB["Pipeline notebooks<br/>(01 → 05)"]
+            OLL["Ollama (local)<br/>embeddings: nomic-embed-text"]
+        end
+        subgraph GPU["GPU machine (on-prem)"]
+            VLLM["vLLM server<br/>Qwen3.8-27B-FP8<br/>0.0.0.0:8000/v1"]
+        end
+        UI -->|"chat completions<br/>(LLM_BASE_URL)"| VLLM
+        NB -->|"chat completions"| VLLM
+        UI -->|"embeddings<br/>(EMBED_BASE_URL)"| OLL
+        NB -->|"embeddings"| OLL
+    end
+    style LAN fill:#f0f7ff,stroke:#4a90d9
+    style GPU fill:#fff4e6,stroke:#e8a33d
+```
+
+- **LLM** (answer generation): vLLM on the GPU machine, reached via
+  `LLM_BASE_URL=http://<gpu-host>:8000/v1` — `<gpu-host>` is the
+  machine's **internal LAN IP** (e.g. `192.168.1.50`). The server binds
+  to `0.0.0.0`, so every machine in your network can reach it. No port
+  forwarding, no public IP, no TLS needed on a trusted LAN.
+- **Embeddings** (indexing + retrieval): Ollama on the app machine
+  itself — CPU is fine, nothing leaves the machine.
+- **Vector index** (ChromaDB): local disk, `data/db/chroma/`.
+
+## Option A: vLLM on a GPU machine (recommended)
+
+### What you need
 
 | Requirement | Notes |
 |---|---|
@@ -13,7 +53,7 @@ GPU machine. The app and the notebooks only need an **OpenAI-compatible API**
 | vLLM | installed in a dedicated venv (example below uses `/opt/vllm`) |
 | Model weights | `Qwen/Qwen3.8-27B-FP8` (Hugging Face) |
 
-## Quick start (CLI)
+### Quick start (CLI)
 
 ```bash
 vllm serve Qwen/Qwen3.8-27B-FP8 \
@@ -30,7 +70,7 @@ GET  /v1/models
 POST /v1/chat/completions
 ```
 
-## Production: systemd service
+### Production: systemd service
 
 `/etc/systemd/system/vllm.service`:
 
@@ -86,7 +126,7 @@ sudo systemctl enable --now vllm
 journalctl -u vllm -f        # watch startup
 ```
 
-## Key flags (what actually matters)
+### Key flags (what actually matters)
 
 | Flag | Why |
 |---|---|
@@ -99,6 +139,26 @@ journalctl -u vllm -f        # watch startup
 | `--reasoning-parser qwen3` | Splits reasoning content into a separate field in the API response |
 | `--max-num-batched-tokens 16384` | Batch token budget — not critical, leave at default if unsure |
 
+## Option B: Ollama (no GPU)
+
+For local development without a GPU machine, Ollama serves the same
+OpenAI-compatible API:
+
+```bash
+ollama serve                      # default: http://localhost:11434
+ollama pull qwen3.5:0.8b
+ollama pull nomic-embed-text
+```
+
+```bash
+# .env
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama                # any non-empty value
+LLM_MODEL=qwen3.5:0.8b
+EMBED_BASE_URL=http://localhost:11434
+EMBED_MODEL=nomic-embed-text
+```
+
 ## Wiring it into this repository
 
 1. `.env` (local, git-ignored):
@@ -107,6 +167,9 @@ journalctl -u vllm -f        # watch startup
    LLM_BASE_URL=http://<gpu-host>:8000/v1
    LLM_MODEL=qwen3.8:27b
    ```
+
+   `<gpu-host>` is the **internal LAN IP** of your GPU machine
+   (e.g. `192.168.1.50`) — see the topology diagram above.
 
 2. API key (if the server is behind auth) goes into the **secrets file**
    outside the workspace — never into `.env` or the repo:
@@ -146,6 +209,13 @@ The system message must be the **first** message in the list — some
 chat templates misbehave otherwise. `app/src/rag_system/llm.py` already
 orders the messages correctly.
 
+## Monitoring
+
+vLLM ships a Grafana dashboard (via Prometheus) — useful to watch
+throughput, prefix-cache hit rate and KV-cache usage:
+
+![Grafana vLLM monitoring dashboard](grafana-monitoring-2026-08-30.png)
+
 ## Health check
 
 ```bash
@@ -160,22 +230,3 @@ curl -s http://<gpu-host>:8000/v1/chat/completions \
   -d '{"model": "qwen3.8:27b", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 8}'
 ```
 
-## Alternative: Ollama (no GPU)
-
-For local development without a GPU machine, Ollama serves the same
-OpenAI-compatible API:
-
-```bash
-ollama serve                      # default: http://localhost:11434
-ollama pull qwen3.5:0.8b
-ollama pull nomic-embed-text
-```
-
-```bash
-# .env
-LLM_BASE_URL=http://localhost:11434/v1
-LLM_API_KEY=ollama                # any non-empty value
-LLM_MODEL=qwen3.5:0.8b
-EMBED_BASE_URL=http://localhost:11434
-EMBED_MODEL=nomic-embed-text
-```
