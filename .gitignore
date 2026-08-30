@@ -100,3 +100,5 @@ __marimo__/
 
 NOTE.md
 CLAUDE.md
+# Local staging area for files under review (never committed)
+staging/
