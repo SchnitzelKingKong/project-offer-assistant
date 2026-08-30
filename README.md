@@ -124,6 +124,9 @@ make -C app test              # run the test suite (92 tests)
      offer detail panel) — link them as:
      ![Chat with citations](docs/images/chat.png)
 -->
+![The Project Offer Assistant answering a question with cited sources](docs/Streamlitapp-2026-08-30_18-06-28.png)
+
+<em>Figure 1: The Project Offer Assistant in action — a natural-language question about day rates, answered with cited sources (right: the offer detail panel for the clicked citation AG1005).</em>
 
 ## Privacy
 

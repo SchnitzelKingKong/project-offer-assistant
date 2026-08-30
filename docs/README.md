@@ -22,7 +22,7 @@ any point during development.
 
 ![The on-prem coding agent at work](local-inference/byok-vscode-2026-08-30_02-56-47.png)
 
-<em>The on-prem coding agent at work — VS Code wired via BYOK to the self-hosted vLLM endpoint.</em>
+<em>Figure 1: The on-prem coding agent at work — VS Code wired via BYOK to the self-hosted vLLM endpoint.</em>
 
 Two things worth calling out:
 
