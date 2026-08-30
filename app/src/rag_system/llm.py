@@ -1,9 +1,16 @@
 """LLM client for chat and answer generation.
 
-Uses the native Ollama API so that thinking/reasoning can be disabled
-(``think=False``) — the OpenAI-compatible endpoint ignores the
-``enable_thinking`` flag for Qwen3 models, which makes them think for
-minutes before answering.
+Supports two kinds of endpoints (both configured via ``LLM_BASE_URL``):
+
+- **Local Ollama** — uses the native Ollama API so that thinking can be
+  disabled (``think=False``); the OpenAI-compatible endpoint ignores the
+  ``enable_thinking`` flag for Qwen3 models, which makes them think for
+  minutes before answering.
+- **Remote OpenAI-compatible server (vLLM)** — vLLM does not speak the
+  native Ollama API, so an adapter (``_OpenAICompatClient``) exposes the
+  same ``chat()`` interface on top of the OpenAI API. Qwen3 thinking is
+  disabled there via ``chat_template_kwargs`` (vLLM-specific, passed
+  through ``extra_body``).
 """
 
 from __future__ import annotations
@@ -66,14 +73,42 @@ HYDE_PROMPT = (
 )
 
 
-def _client() -> ollama.Client:
-    """Ollama client pointed at the configured endpoint.
+class _OpenAICompatClient:
+    """Ollama-style ``chat()`` interface on top of an OpenAI-compatible API.
 
-    ``llm_base_url`` may be an OpenAI-compatible URL (``…/v1``) — the
-    native API lives at the host root.
+    Lets the rest of the module (and the tests, which patch ``_client``)
+    stay unchanged while talking to vLLM instead of Ollama.
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        from openai import OpenAI
+
+        self._client = OpenAI(base_url=base_url, api_key=api_key)
+
+    def chat(self, model: str, messages: list[dict], think: bool = False) -> dict:
+        kwargs: dict = {}
+        if not think:
+            # vLLM-specific: disable Qwen3 thinking via the chat template.
+            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+        response = self._client.chat.completions.create(
+            model=model, messages=messages, **kwargs
+        )
+        return {"message": {"content": response.choices[0].message.content}}
+
+
+def _client() -> ollama.Client | _OpenAICompatClient:
+    """LLM client pointed at the configured endpoint.
+
+    Local Ollama (``localhost`` / ``127.0.0.1``) uses the native API;
+    anything else is treated as an OpenAI-compatible server (vLLM).
+    ``llm_base_url`` may be an OpenAI-compatible URL (``…/v1``) — for
+    Ollama the native API lives at the host root.
     """
     base_url = settings.llm_base_url.removesuffix("/v1")
-    return ollama.Client(host=base_url)
+    host = base_url.split("//")[-1].split("/")[0].split(":")[0]
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return ollama.Client(host=base_url)
+    return _OpenAICompatClient(settings.llm_base_url, settings.llm_api_key)
 
 
 def chat(messages: list[dict]) -> str:
