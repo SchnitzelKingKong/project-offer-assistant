@@ -291,4 +291,10 @@ def generate_answer(
             ),
         },
     ]
-    return chat(messages)
+    # Call the client directly — NOT the chat() wrapper, which would prepend
+    # CHAT_SYSTEM_PROMPT and produce two system messages (vLLM rejects that
+    # with a 400: "System message must be at the beginning").
+    response = _client().chat(
+        model=settings.llm_model, messages=messages, think=False
+    )
+    return response["message"]["content"] or ""
