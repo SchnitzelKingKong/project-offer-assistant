@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Theater Ensemble \"Bühne Frei\" e.V.",
+    "ansprechpartner": "Herr Dr. Markus Hoffmann",
+    "strassen": [
+      "Kulturhof 5"
+    ],
+    "ort": "01067 Dresden"
+  }
+}

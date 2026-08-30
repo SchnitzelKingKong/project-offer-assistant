@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "NordBank AG",
+    "ansprechpartner": "Frau Anna Lindner",
+    "strassen": [
+      "Bankenviertel 1"
+    ],
+    "ort": "20095 Hamburg"
+  }
+}

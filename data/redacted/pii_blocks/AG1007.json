@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Museum der Moderne",
+    "ansprechpartner": "Frau Dr. Elena Fischer",
+    "strassen": [
+      "Kunsthalle 1"
+    ],
+    "ort": "80331 München"
+  }
+}

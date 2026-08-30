@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Streaming-Plattform \"Kanal9\"",
+    "ansprechpartner": "Frau Julia Weber",
+    "strassen": [
+      "Mediastraße 3"
+    ],
+    "ort": "10115 Berlin"
+  }
+}

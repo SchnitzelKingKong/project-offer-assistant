@@ -2,8 +2,13 @@
 
 # Source documents (real customer data — never commit)
 **/*.pdf
-data/*
-!data/.gitkeep
+# Exception: fictitious sample offers used by the pipeline notebooks
+!source/offers/*.pdf
+
+# Pipeline data: redacted/ and extracted/ are committed (fictitious PII);
+# raw/ (unredacted) and db/ (Chroma index) are build artifacts
+data/raw/
+data/db/
 
 # Environment & secrets
 **/.env

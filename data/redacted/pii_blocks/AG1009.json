@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Alster Media GmbH",
+    "ansprechpartner": "Frau Nina Petersen",
+    "strassen": [
+      "Alsterufer 21"
+    ],
+    "ort": "20095 Hamburg"
+  }
+}

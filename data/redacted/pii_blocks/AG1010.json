@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Baltic Events UG",
+    "ansprechpartner": "Herr Jonas Meyer",
+    "strassen": [
+      "Strandpromenade 3"
+    ],
+    "ort": "23552 Lübeck"
+  }
+}

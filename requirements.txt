@@ -8,6 +8,10 @@ llama-index-readers-file==0.6.0
 # PDF extraction (PyMuPDF — fast, per-page metadata; pypdf as fallback)
 pymupdf==1.28.2
 pypdf==6.16.1
+pdfplumber
+
+# Sample offer PDF generation (pipeline notebooks)
+reportlab
 
 # Vector database
 chromadb==1.5.9

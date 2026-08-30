@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Harbor & Co. GbR",
+    "ansprechpartner": "Herr Felix Wagner",
+    "strassen": [
+      "Werftbahnstraße 8"
+    ],
+    "ort": "24143 Kiel"
+  }
+}

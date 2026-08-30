@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "GreenWave Energy SE",
+    "ansprechpartner": "Herr Thomas Reuter",
+    "strassen": [
+      "Energiepark 9"
+    ],
+    "ort": "80939 München"
+  }
+}

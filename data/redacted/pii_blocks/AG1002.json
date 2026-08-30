@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "TransLog AG",
+    "ansprechpartner": "Herr Peter Brandt",
+    "strassen": [
+      "Hafenweg 12"
+    ],
+    "ort": "20457 Hamburg"
+  }
+}

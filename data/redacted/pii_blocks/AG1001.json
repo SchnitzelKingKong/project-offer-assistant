@@ -1,0 +1,16 @@
+{
+  "sender": {
+    "strassen": [
+      "Lindenstraße 42"
+    ],
+    "ort": "20359 Hamburg"
+  },
+  "kunde": {
+    "firma": "Filmstudio Nord GmbH",
+    "ansprechpartner": "Frau Sabine Krüger",
+    "strassen": [
+      "Speicherstadt 7"
+    ],
+    "ort": "20457 Hamburg"
+  }
+}
