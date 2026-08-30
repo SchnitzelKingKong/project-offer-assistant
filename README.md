@@ -102,6 +102,65 @@ at the repository root: `notebooks/`, `source/offers/`, `scripts/`,
 `data/`. See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout,
 setup, and how to run the notebooks (01 → 05).
 
+### Data journey
+
+```mermaid
+flowchart TB
+    subgraph INGEST["Ingestion — offline, run once"]
+        direction TB
+        PDF["Multi-page, heterogeneous PDFs"]
+        NORM["Normalized raw text"]
+        RED["Redacted text<br/>(PII removed)"]
+        EXT["Extraction<br/>(structured facts + metadata)"]
+        EMB["Chunking + embedding"]
+        SDB[("Facts DB<br/>(SQLite)")]
+        PAD["offline batch job"]:::pad
+        PDF --> NORM --> RED --> EXT
+        EXT -->|"facts: id, date, price"| SDB
+        EXT -->|"text chunks + metadata"| EMB
+        EXT ~~~ PAD
+    end
+
+    EMB --> VDB[("Vector DB")]
+
+    subgraph QUERY["Query — at runtime"]
+        direction TB
+        Q["Natural-language question"]
+        EMBQ["Embedding model"]
+        BM25["Keyword index (BM25)<br/>built at runtime from the vector DB"]
+        RET["Retrieval layer<br/>(fuses both result lists)"]
+        LLM["LLM<br/>(answer generation)"]
+        APP["App: answer with citations"]
+        Q --> EMBQ
+        BM25 -->|"keyword hits"| RET
+        RET -->|"top chunks"| LLM
+        LLM --> APP
+    end
+
+    EMBQ -->|"semantic search"| VDB
+    VDB -->|"vector hits"| RET
+    VDB -->|"chunk corpus"| BM25
+
+    VDB ~~~ Q
+
+    classDef pad fill:none,stroke:none,color:transparent
+    style INGEST fill:#f0f7ff,stroke:#4a90d9,stroke-width:1px
+    style QUERY fill:#fff4e6,stroke:#e8a33d,stroke-width:1px
+    style VDB fill:#ffffff,stroke:#999999,stroke-width:1px
+```
+
+<em>Figure 1: The data journey — from offer PDF to cited answer. Ingestion runs once (offline); the query path runs at runtime.</em>
+
+Two things worth noting:
+
+- **The keyword index does not exist on disk.** At query time the retrieval
+  layer loads the chunk corpus from the vector DB and builds the BM25 keyword
+  index on the fly — the vector DB is the single source of truth, so the
+  keyword path can never drift out of sync with the vector path.
+- **The embedding model serves the question, not the answer.** The question
+  is embedded for the vector search; the LLM only ever sees the retrieved
+  chunks and generates the cited answer from them.
+
 | Component | Choice |
 |---|---|
 | LLM | Qwen 27B via vLLM (GPU) or Ollama (local) — OpenAI-compatible API |
@@ -137,7 +196,7 @@ make -C app test              # run the test suite (92 tests)
 -->
 ![The Project Offer Assistant answering a question with cited sources](docs/Streamlitapp-2026-08-30_18-06-28.png)
 
-<em>Figure 1: The Project Offer Assistant in action — a natural-language question about day rates, answered with cited sources (right: the offer detail panel for the clicked citation AG1006).</em>
+<em>Figure 2: The Project Offer Assistant in action — a natural-language question about day rates, answered with cited sources (right: the offer detail panel for the clicked citation AG1006).</em>
 
 ## Privacy
 
