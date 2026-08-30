@@ -9,6 +9,9 @@ Implements the response contract from the handoff (§3.3):
   code reduces (count / mean / range / outliers). No retrieval, no top-k cap.
 - Comparison words ("vergleiche", "unterschiede", …)
   → map-reduce over topic retrieval (one fact line per offer → comparison).
+- New-request scenario + "Angebotsentwurf/zusammenstellen"
+  → broad retrieval + map-reduce draft assembly (building blocks from
+    several offers → draft with reference price).
 - Price/date/term question without any offer reference or year
   → clarification with candidate chips (no LLM call).
 - Aggregation words ("welche", "alle", "mehr als X €", "im Jahr Y")
@@ -23,7 +26,9 @@ from dataclasses import dataclass, field
 
 from .breadth import (
     comparison_route,
+    draft_route,
     is_comparison,
+    is_draft,
     is_statistics,
     is_year_question,
     statistics_route,
@@ -213,27 +218,37 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
             chunks=chunks,
         )
 
-    # 2) Statistics (count/mean/outliers) → FULL SCAN + code reduce.
+    # 2) Draft (new-request scenario + "Angebotsentwurf/zusammenstellen")
+    #    → broad retrieval + map-reduce assembly. Checked BEFORE
+    #    statistics/ambiguous/aggregation: draft questions contain price
+    #    words and "welche" and would otherwise be misrouted.
+    if is_draft(question):
+        route, content, chunks = draft_route(
+            retriever, question, hyde_passage=_hyde_for(question)
+        )
+        return QueryResult(type="answer", route=route, content=content, chunks=chunks)
+
+    # 3) Statistics (count/mean/outliers) → FULL SCAN + code reduce.
     #    Checked BEFORE ambiguous/aggregation: "wie viele … Zahlungsziel"
     #    would otherwise hit the clarification or RAG path.
     if is_statistics(question):
         route, content, chunks = statistics_route(retriever, question)
         return QueryResult(type="answer", route=route, content=content, chunks=chunks)
 
-    # 3) Comparison (vergleiche/unterschiede) → map-reduce over topic retrieval.
+    # 4) Comparison (vergleiche/unterschiede) → map-reduce over topic retrieval.
     if is_comparison(question):
         route, content, chunks = comparison_route(
             retriever, question, hyde_passage=_hyde_for(question)
         )
         return QueryResult(type="answer", route=route, content=content, chunks=chunks)
 
-    # 4) Year-list question ("Welche Angebote sind im Jahr 2024?") →
+    # 5) Year-list question ("Welche Angebote sind im Jahr 2024?") →
     #    deterministic metadata scan — complete list, no LLM, no retrieval.
     if is_year_question(question):
         route, content, chunks = year_route(retriever, question)
         return QueryResult(type="answer", route=route, content=content, chunks=chunks)
 
-    # 5) Ambiguous price/date/term question → clarification (no LLM call).
+    # 6) Ambiguous price/date/term question → clarification (no LLM call).
     if is_ambiguous(question):
         candidates = retriever.candidates_for(question, top_k=settings.top_k)
         if candidates:
@@ -253,7 +268,7 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
                 candidates=candidates,
             )
 
-    # 6) Aggregation question → explicit limitation until the SQL path exists.
+    # 7) Aggregation question → explicit limitation until the SQL path exists.
     if is_aggregation(question):
         chunks = retriever.hybrid_search(question, hyde_passage=_hyde_for(question))
         chunks, refusal = _rerank_and_gate(question, chunks, is_compound(question))

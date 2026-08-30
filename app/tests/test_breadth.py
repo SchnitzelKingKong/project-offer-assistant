@@ -9,8 +9,10 @@ import pytest
 from rag_system.breadth import (
     _FACTS_CACHE,
     comparison_route,
+    draft_route,
     full_scan_facts,
     is_comparison,
+    is_draft,
     is_statistics,
     is_year_question,
     reduce_statistics,
@@ -244,4 +246,86 @@ def test_comparison_route_empty_retrieval():
     route, content, chunks = comparison_route(_Empty(), "Vergleiche.")
     assert route == "Comparison"
     assert "Keine passenden Angebote" in content
+    assert chunks == []
+
+
+# --- Draft route (map/reduce mocked) -----------------------------------------
+
+
+def test_is_draft_matches_draft_words():
+    assert is_draft("Stelle mir daraus einen Angebotsentwurf zusammen.")
+    assert is_draft("Kannst du ein Angebot erstellen?")
+    assert is_draft("Was würde ich verlangen?")
+    assert is_draft("Bitte das Angebot aufsetzen.")
+    # The verb must directly follow "Angebot" — otherwise normal questions
+    # about offers ("ein Angebot für den Kunden anpassen") would misroute.
+    assert not is_draft("Kannst du das Angebot für den Kunden anpassen?")
+    # A normal question about an existing offer is NOT a draft request.
+    assert not is_draft("Wie hoch war der Preis von AG0085?")
+    assert not is_draft("Vergleiche die Zahlungsbedingungen.")
+
+
+def test_draft_route_maps_per_offer_and_reduces():
+    blocks = [
+        {"positions": [{"position": "Color Grading", "menge": "2 Tag",
+                        "satz_eur": 950.0, "betrag_eur": 1900.0}],
+         "zahlungsbedingungen": "50 % Anzahlung", "abnahme": None,
+         "lieferformate": ["ProRes"], "revisionen": None},
+        {"positions": [{"position": "Mastering", "menge": "1 Festpreis",
+                        "satz_eur": 600.0, "betrag_eur": 600.0}],
+         "zahlungsbedingungen": None, "abnahme": None,
+         "lieferformate": ["H.264"], "revisionen": None},
+    ]
+    with patch("rag_system.breadth.extract_draft_blocks",
+               side_effect=lambda text: blocks[0] if "AG0001" in text
+               else blocks[1]) as mock_map, \
+         patch("rag_system.breadth.draft_reduce",
+               return_value="Entwurf: 1.900,00 € + 600,00 € = 2.500,00 € "
+                            "Quellen: AG0001, AG0002") as mock_reduce:
+        route, content, chunks = draft_route(
+            _FakeHybridRetriever(),
+            "Neue Anfrage: Color Grading. Stelle mir einen Angebotsentwurf "
+            "zusammen.")
+    assert route == "Draft"
+    assert "2.500,00 €" in content
+    # One map call per OFFER (AG0001's two chunks merged), not per chunk.
+    assert mock_map.call_count == 2
+    # The reduce gets the scenario plus the blocks (with offer ids merged in).
+    scenario, reduce_blocks = mock_reduce.call_args.args
+    assert "Angebotsentwurf" in scenario
+    assert [b["angebot_id"] for b in reduce_blocks] == ["AG0001", "AG0002"]
+    assert reduce_blocks[0]["datum"] is None  # no datum in fake metadata
+    assert [c.source for c in chunks] == ["AG0001", "AG0002"]
+
+
+def test_draft_route_skips_unextractable_offers():
+    with patch("rag_system.breadth.extract_draft_blocks",
+               side_effect=lambda text: {"positions": []} if "AG0001" in text
+               else None), \
+         patch("rag_system.breadth.draft_reduce",
+               return_value="Entwurf aus AG0001.") as mock_reduce:
+        route, content, chunks = draft_route(
+            _FakeHybridRetriever(), "Stelle mir einen Angebotsentwurf zusammen.")
+    assert route == "Draft"
+    # Only AG0001's block survived the map step.
+    assert [b["angebot_id"] for b in mock_reduce.call_args.args[1]] == ["AG0001"]
+
+
+def test_draft_route_empty_retrieval():
+    class _Empty:
+        def hybrid_search(self, *a, **k):
+            return []
+
+    route, content, chunks = draft_route(_Empty(), "Angebotsentwurf bitte.")
+    assert route == "Draft"
+    assert "Keine passenden Angebote" in content
+    assert chunks == []
+
+
+def test_draft_route_no_blocks_extracted():
+    with patch("rag_system.breadth.extract_draft_blocks", return_value=None):
+        route, content, chunks = draft_route(
+            _FakeHybridRetriever(), "Stelle mir einen Angebotsentwurf zusammen.")
+    assert route == "Draft"
+    assert "Keine Bausteine" in content
     assert chunks == []

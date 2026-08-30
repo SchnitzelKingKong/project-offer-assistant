@@ -19,7 +19,13 @@ import re
 
 from .citation_markup import _format_date
 from .config import settings
-from .llm import comparison_line, comparison_reduce, extract_offer_facts
+from .llm import (
+    comparison_line,
+    comparison_reduce,
+    draft_reduce,
+    extract_draft_blocks,
+    extract_offer_facts,
+)
 from .retriever import Retriever, RetrievedChunk
 
 STATISTICS_RE = re.compile(
@@ -55,6 +61,23 @@ def is_year_question(question: str) -> bool:
     match — they stay on the aggregation/statistics routes.
     """
     return bool(YEAR_RE.search(question) and OFFER_WORD_RE.search(question))
+
+
+# New-request scenario + "assemble a draft" → draft route. Top-k RAG
+# cannot do this: a draft needs building blocks (line items, rates,
+# payment terms, acceptance clauses, delivery formats) from SEVERAL
+# offers, so the route retrieves broadly and assembles via map-reduce.
+DRAFT_RE = re.compile(
+    r"\b(angebotsentwurf|angebotsmuster|angebot\s+(zusammenstellen|erstellen|"
+    r"aufsetzen|ausarbeiten|kalkulieren|anfertigen)|"
+    r"was\s+w[uü]rde\s+ich\s+(verlangen|berechnen|durchrechnen))\b",
+    re.IGNORECASE,
+)
+
+
+def is_draft(question: str) -> bool:
+    """New-request scenario + 'assemble a draft' → draft route."""
+    return bool(DRAFT_RE.search(question))
 
 
 # ----------------------------------------------------------------------
@@ -243,3 +266,58 @@ def comparison_route(
     text = comparison_reduce(question, lines)
     ranked = [offer_chunks[0] for _, offer_chunks in offers]
     return ("Comparison", text, ranked)
+
+
+# ----------------------------------------------------------------------
+# Draft: map-reduce assembly of a NEW offer from historical offers
+# ----------------------------------------------------------------------
+
+
+def draft_route(
+    retriever: Retriever,
+    question: str,
+    hyde_passage: str | None = None,
+) -> tuple[str, str, list[RetrievedChunk]]:
+    """MAP-REDUCE draft assembly over broad topic retrieval.
+
+    The user describes a NEW incoming request (scenario) and asks for a
+    draft offer. Top-k RAG cannot assemble a draft — it needs building
+    blocks (line items, rates, payment terms, acceptance clauses,
+    delivery formats) from SEVERAL offers. Strategy:
+
+    1. Retrieve broadly (top-25, dedup by offer, capped by
+       ``comparison_top_offers``).
+    2. MAP: the LLM extracts structured building blocks per offer.
+    3. REDUCE: the LLM assembles the draft — line items, payment terms,
+       acceptance, formats, and a reference price derived transparently
+       from the historical rates.
+    """
+    chunks = retriever.hybrid_search(
+        question, top_n=25, hyde_passage=hyde_passage
+    )
+    by_offer: dict[str, list[RetrievedChunk]] = {}
+    for chunk in chunks:
+        by_offer.setdefault(chunk.source, []).append(chunk)
+    offers = list(by_offer.items())[: settings.comparison_top_offers]
+    if not offers:
+        return ("Draft", "Keine passenden Angebote für den Entwurf gefunden.", [])
+
+    blocks: list[dict] = []
+    for offer_id, offer_chunks in offers:
+        text = "\n\n".join(c.text for c in offer_chunks)[:12000]
+        block = extract_draft_blocks(text)
+        if block is None:
+            continue
+        block["angebot_id"] = offer_id
+        block["datum"] = next(
+            (c.metadata.get("datum") for c in offer_chunks
+             if c.metadata.get("datum")),
+            None,
+        )
+        blocks.append(block)
+    if not blocks:
+        return ("Draft", "Keine Bausteine konnten extrahiert werden.", [])
+
+    text = draft_reduce(question, blocks)
+    ranked = [offer_chunks[0] for _, offer_chunks in offers]
+    return ("Draft", text, ranked)

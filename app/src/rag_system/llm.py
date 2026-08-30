@@ -394,3 +394,102 @@ def comparison_reduce(question: str, lines: list[str]) -> str:
         think=False,
     )
     return _strip_think(response["message"]["content"] or "").strip()
+
+
+# ----------------------------------------------------------------------
+# Draft route — LLM steps (map: building blocks, reduce: draft assembly)
+# ----------------------------------------------------------------------
+
+DRAFT_MAP_PROMPT = (
+    "Du liest ein historisches Angebot eines Post-Production-Studios. "
+    "Extrahiere NUR Bausteine, die explizit im Text stehen. Antworte NUR "
+    "mit einem JSON-Objekt dieser Form:\n"
+    '{"positions": [{"position": string, "menge": string, "satz_eur": number|null, '
+    '"betrag_eur": number|null}], '
+    '"zahlungsbedingungen": string|null, "abnahme": string|null, '
+    '"lieferformate": [string], "revisionen": string|null}\n'
+    "Regeln:\n"
+    "- positions: alle Leistungspositionen mit Menge, Einzelsatz und Betrag, "
+    "wie im Angebot ausgewiesen (Sätze in EUR netto).\n"
+    "- zahlungsbedingungen: Zahlungsziel, Skonto, Raten — kurze Wiedergabe.\n"
+    "- abnahme: Abnahme-Klausel — kurze Wiedergabe.\n"
+    "- lieferformate: genannte Dateiformate/Container (z. B. MXF, MP4, ProRes).\n"
+    "- revisionen: Anzahl/Regelung von Revisionsrunden, falls genannt.\n"
+    "- Fehlt etwas, steht null bzw. eine leere Liste — nichts erfinden.\n\n"
+    "TEXT:\n{text}"
+)
+
+
+def extract_draft_blocks(text: str) -> dict | None:
+    """MAP step of the draft route: one LLM call per offer → structured
+    building blocks as a JSON dict. Returns ``None`` when the model
+    produces no parseable JSON after 3 attempts (the caller then skips
+    the offer)."""
+    prompt = DRAFT_MAP_PROMPT.replace("{text}", text[:12000])
+    for attempt in range(3):
+        try:
+            response = _client().chat(
+                model=settings.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                think=False,
+            )
+            raw = _strip_think(response["message"]["content"] or "")
+            match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+        except Exception:
+            pass
+        if attempt < 2:
+            time.sleep(0.5 * (attempt + 1))
+    return None
+
+
+DRAFT_REDUCE_PROMPT = (
+    "Du bist der Angebot-Assistent eines Post-Production-Studios. Aus der "
+    "Historie des Studios soll ein ANGEBOTSENTWURF für eine neue Anfrage "
+    "zusammengestellt werden.\n\n"
+    "NEUE ANFRAGE:\n{scenario}\n\n"
+    "BAUSTEINE AUS HISTORISCHEN ANGEBOTEN (JSON pro Angebot):\n{blocks}\n\n"
+    "Stelle den Entwurf auf Deutsch in dieser Struktur zusammen:\n"
+    "1. **Leistungspositionen** — die zutreffendsten Positionen aus der "
+    "Historie, als Liste mit Menge und Satz; hinter jeder Position die "
+    "Quell-Angebots-ID (AG####, ohne Klammern) und ein kurzer Begründung "
+    "in einem Satz.\n"
+    "2. **Zahlungsbedingungen** — Empfehlung aus der Historie, mit Quelle.\n"
+    "3. **Abnahme** — Klausel aus der Historie, mit Quelle.\n"
+    "4. **Lieferformate** — aus der Historie, mit Quelle.\n"
+    "5. **Richtpreis** — addiere die Beträge der übernommenen Positionen "
+    "auf und nenne die Summe als Richtpreis; zeige die Addition in einer "
+    "Zeile (z. B. '1.900,00 € + 450,00 € = 2.350,00 €'). Weicht der "
+    "Umfang der neuen Anfrage vom historischen ab (z. B. kürzeres Material), "
+    "nenne stattdessen einen Korridor aus der Spanne der historischen "
+    "Vergleichswerte und begründe in einem Satz.\n"
+    "6. **Quellen** — eine Zeile 'Quellen: AG####, AG####' (kommagetrennt).\n\n"
+    "Regeln:\n"
+    "- Übernimm nur Bausteine, die zur neuen Anfrage passen. Passt nichts, "
+    "schreibe das ehrlich in einem Satz.\n"
+    "- Erfinde keine Sätze, die nicht in den Bausteinen stehen.\n"
+    "- Schreibe NUR das Endergebnis — keine Zwischenschritte, keine "
+    "Korrekturen, keine 'Erneute Prüfung'. Rechne einmal sauber durch."
+)
+
+
+def draft_reduce(scenario: str, blocks: list[dict]) -> str:
+    """REDUCE step of the draft route: assemble the draft from the
+    structured building blocks (system message first — vLLM requires it)."""
+    prompt = DRAFT_REDUCE_PROMPT.replace("{scenario}", scenario).replace(
+        "{blocks}", json.dumps(blocks, ensure_ascii=False, indent=1)
+    )
+    response = _client().chat(
+        model=settings.llm_model,
+        messages=[
+            {
+                "role": "system",
+                "content": "Du erstellst Angebotsentwürfe NUR aus den "
+                "gegebenen Bausteinen.",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        think=False,
+    )
+    return _strip_think(response["message"]["content"] or "").strip()
