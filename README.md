@@ -21,30 +21,86 @@ orientation based on what similar projects looked like before.
 
 Everything runs in-house: no cloud APIs, no per-token costs, full data privacy.
 
-## Architecture
+## Repository Layout
 
 ```
-app/streamlit_app.py      thin UI layer (chat, citations, status)
-app/src/rag_system/       RAG logic (testable without the UI)
-├── config.py             settings from .env
-├── retriever.py          ChromaDB vector retrieval
-└── llm.py                answer generation (OpenAI-compatible endpoint)
-app/tests/                pytest suite
-notebooks/                offer pipeline (PDF → sanitize → extract → index)
-source/offers/            fictitious sample offers + generator
-sanitizer.py              PII sanitizer (used by the pipeline)
+app/
+├── streamlit_app.py        thin UI layer (chat, citations, status)
+├── src/rag_system/         RAG logic (testable without the UI)
+│   ├── config.py           settings from .env (3-layer env loading)
+│   ├── retriever.py        ChromaDB vector retrieval + BM25 + RRF fusion
+│   ├── llm.py              answer generation (OpenAI-compatible endpoint)
+│   ├── query.py            question routing, prechecks, refusal gate
+│   ├── query_expansion.py  query expansion (abbreviations, synonyms)
+│   ├── breadth.py          breadth routes (statistics, comparison, draft, year)
+│   └── citation_markup.py  citation markup → markdown/HTML rendering
+├── scripts/build_index.py  (re)build the vector index from data/
+├── tests/                  pytest suite (92 tests)
+└── Makefile                install / index / run / test targets
+notebooks/                  offer pipeline (PDF → sanitize → extract → index → demo)
+source/offers/              fictitious sample offers + generator
+sanitizer.py                PII sanitizer (used by the pipeline)
+data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
+docs/                       sidequest documentation (e.g. vLLM setup)
+.env.example                default configuration (committed)
+.env                        local overrides (git-ignored)
 ```
 
 **Build-once, reload-later:** the vector index is built once by the pipeline
 notebooks (persisted to `data/db/chroma/`) and the app only reloads it via
 `INDEX_DIR` in `.env` — never re-embeds at query time.
 
+## Prerequisites
+
+| Requirement | Version / Notes |
+|---|---|
+| Python | 3.11 (tested with 3.11.15) |
+| conda (or any env manager) | `conda create -n quote-rag python=3.11` |
+| Ollama | local, for embeddings (`nomic-embed-text`) — CPU is fine |
+| LLM endpoint | any OpenAI-compatible API: vLLM on a GPU machine (see [`docs/vllm/`](docs/vllm/README.md)) or Ollama local |
+| OS | macOS / Linux (developed on macOS) |
+
+No cloud accounts, no paid APIs. Everything runs on your own hardware / LAN.
+
+## Setup
+
+```bash
+# 1. Create the environment
+conda create -n quote-rag python=3.11 -y
+conda activate quote-rag
+
+# 2. Install dependencies
+make -C app install           # = pip install -r requirements.txt
+
+# 3. Configure
+cp .env.example .env          # then edit endpoints / model names
+
+# 4. Put secrets OUTSIDE the workspace (highest-priority env layer):
+mkdir -p ~/.config/rag-quote-history
+printf 'LLM_API_KEY=your-key\n' > ~/.config/rag-quote-history/secrets.env
+chmod 600 ~/.config/rag-quote-history/secrets.env
+```
+
+### Configuration (3-layer env loading)
+
+Both the app (`app/src/rag_system/config.py`) and the notebook setup cells
+load configuration in this order (later layers win):
+
+1. `.env.example` — committed defaults
+2. `.env` — local overrides (git-ignored)
+3. `~/.config/rag-quote-history/secrets.env` — **secrets only** (API keys),
+   outside the workspace, `chmod 600`. External agents with repo access
+   never see the real key.
+
+All pipeline parameters (chunking, RRF weights, HyDE, refusal thresholds,
+…) are env-driven — see `.env.example` for the full list with comments.
+
 ## Pipeline
 
-The offer pipeline (PDF → sanitize → extract → index → retrieval demo) lives at
-the repository root: `notebooks/`, `source/offers/`, `sanitizer.py`, `data/`.
-See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout, setup,
-and how to run the notebooks (01 → 05).
+The offer pipeline (PDF → sanitize → extract → index → retrieval demo) lives
+at the repository root: `notebooks/`, `source/offers/`, `sanitizer.py`,
+`data/`. See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout,
+setup, and how to run the notebooks (01 → 05).
 
 | Component | Choice |
 |---|---|
@@ -54,34 +110,26 @@ and how to run the notebooks (01 → 05).
 | Framework | LlamaIndex |
 | Frontend | Streamlit |
 
-## Setup
-
-```bash
-# 1. Create the environment (or use your existing one)
-conda create -n quote-rag python=3.11 -y
-conda activate quote-rag
-
-# 2. Install dependencies
-make install            # = pip install -r requirements.txt
-
-# 3. Configure
-cp .env.example .env    # then edit endpoints / model names
-
-# 4. Add source documents to source/offers/ (PDFs)
-#    (10 fictitious sample offers are included)
-```
-
 ## Usage
 
 ```bash
 # build the vector index: run notebooks/ 01 → 03 (see notebooks/PIPELINE.md)
-make -C app run         # start the app → http://localhost:8501
-make -C app test        # run the test suite
+make -C app run               # start the app → http://localhost:8501
+make -C app test              # run the test suite (92 tests)
 ```
+
+### Screenshots
+
+<!-- TODO: add screenshots here (chat with citations, comparison route,
+     offer detail panel) — link them as:
+     ![Chat with citations](docs/images/chat.png)
+-->
 
 ## Privacy
 
 - Unredacted texts (`data/raw/`), the index (`data/db/`) and `.env` are
   git-ignored — real customer data never enters version control.
 - `data/redacted/` and `data/extracted/` contain only fictitious sample data.
+- API keys live in `~/.config/rag-quote-history/secrets.env` — outside the
+  workspace, never committed.
 - All inference runs locally / on your own LAN.
