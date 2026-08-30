@@ -33,6 +33,8 @@ flowchart LR
     style GPU fill:#fff4e6,stroke:#e8a33d
 ```
 
+<em>Figure 1: The whole stack inside one network — app machine (Streamlit, notebooks, Ollama embeddings) and GPU machine (vLLM), connected over the LAN.</em>
+
 - **LLM** (answer generation): vLLM on the GPU machine, reached via
   `LLM_BASE_URL=http://<gpu-host>:8000/v1` — `<gpu-host>` is the
   machine's **internal LAN IP** (e.g. `192.168.1.50`). The server binds
@@ -48,7 +50,7 @@ flowchart LR
 
 | Requirement | Notes |
 |---|---|
-| GPU machine | 2× NVIDIA GPU (tensor parallelism) for a 27B model |
+| GPU machine | NVIDIA GPU (tensor parallelism) for a 27B model |
 | CUDA + drivers | matching the vLLM build |
 | vLLM | installed in a dedicated venv (example below uses `/opt/vllm`) |
 | Model weights | `Qwen/Qwen3.8-27B-FP8` (Hugging Face) |
@@ -132,16 +134,16 @@ journalctl -u vllm -f        # watch startup
 |---|---|
 | `--kv-cache-dtype fp8` | **Game changer** — halves KV-cache memory, so much longer context fits on the same GPUs |
 | `--speculative-config` (MTP) | **Big speedup** — the model's own multi-token-prediction head drafts 3 tokens per step, verified by the full model |
-| `--default-chat-template-kwargs '{"reasoning_effort": "medium"}'` | Qwen3 thinking mode is on by default; capping the effort keeps RAG answers from burning tokens on internal reasoning |
+| `--default-chat-template-kwargs '{"reasoning_effort": "medium"}'` | Qwen3.8 thinking mode is on by default and set xhigh; capping the effort keeps RAG answers from burning tokens on internal reasoning |
 | `--override-generation-config` | Pins sampling params (temperature 1.0, top_p 0.95, top_k 20) so individual clients cannot drift them |
-| `--enable-chunked-prefill` | Splits long prompts into chunks — smoother batching and lower time-to-first-token under load |
-| `--enable-prefix-caching` | Reuses KV cache for shared prompt prefixes (our system prompt is constant across requests) |
+| `--enable-chunked-prefill` | **⚠︎** Splits long prompts into chunks — smoother batching and lower time-to-first-token under load |
+| `--enable-prefix-caching` | **⚠︎** Reuses KV cache for shared prompt prefixes (our system prompt is constant across requests) |
 | `--reasoning-parser qwen3` | Splits reasoning content into a separate field in the API response |
 | `--max-num-batched-tokens 16384` | Batch token budget — not critical, leave at default if unsure |
 
-## Option B: Ollama (no GPU)
+## Option B: Ollama (local)
 
-For local development without a GPU machine, Ollama serves the same
+For local development without a dedicated GPU machine, Ollama serves the same
 OpenAI-compatible API:
 
 ```bash
@@ -211,10 +213,22 @@ orders the messages correctly.
 
 ## Monitoring
 
-vLLM ships a Grafana dashboard (via Prometheus) — useful to watch
-throughput, prefix-cache hit rate and KV-cache usage:
+vLLM ships a Grafana dashboard (via Prometheus). We used it to **optimize
+the serving performance**: watching the decode token rate (tokens/s) and
+the cache usage while tuning the server, until the throughput was where
+we wanted it. The three changes that actually made the difference:
+
+1. **Speculative decoding (MTP)** — the model's own multi-token-prediction
+   head drafts 3 tokens per step, verified by the full model → big
+   decode-speedup.
+2. **Chunked prefill** — long prompts are split into chunks, so prefill
+   and decode interleave smoothly in the batch.
+3. **FP8-quantized KV cache** (`--kv-cache-dtype fp8`) — halves KV-cache
+   memory, so much longer context fits on the same GPUs.
 
 ![Grafana vLLM monitoring dashboard](grafana-monitoring-2026-08-30.png)
+
+<em>Figure 2: The Grafana dashboard used for optimizing the inference backend — decode token rate (tokens/s) and cache usage.</em>
 
 ## Bonus: developing with the on-prem agent (BYOK)
 
@@ -223,7 +237,13 @@ The same endpoint can serve as the LLM backend for a coding agent. VS Code
 repository was developed against it** — no cloud LLM was involved at any
 point during development:
 
-![VS Code wired to the on-prem LLM endpoint (BYOK)](byok-vscode-2026-08-30.png)
+![The on-prem coding agent at work](byok-vscode-2026-08-30_02-56-47.png)
+
+<em>Figure 3: Developing with the Copilot agent framework against the own model — VS Code with the repository's <code>AGENTS.md</code> and the agent chat.</em>
+
+<img src="byok-vscode-2026-08-30_17-02-29.png" alt="VS Code model picker showing the local vLLM model" height="300" style="display:block;margin:auto" />
+
+<em>Figure 4: The model picker — the own provider is selected: <code>Qwen3.8 vllm (local)</code>, the same self-hosted endpoint the app uses.</em>
 
 ## Health check
 

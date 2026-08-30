@@ -10,7 +10,7 @@ inference stack behind them was set up.
 | Topic | What it covers |
 |---|---|
 | [`local-inference/`](local-inference/README.md) | The self-hosted LLM endpoint: vLLM on a 2-GPU machine (systemd service, tuned serving flags, monitoring) and Ollama as the no-GPU alternative — plus how the app and notebooks wire into it |
-| [`local-inference/byok-vscode-2026-08-30.png`](local-inference/byok-vscode-2026-08-30.png) | Proof: the entire repository was developed with an **on-prem coding agent** — VS Code wired via BYOK to the same self-hosted vLLM endpoint, no cloud LLM involved |
+| [`local-inference/`](local-inference/README.md) § BYOK | Proof: the entire repository was developed with an **on-prem coding agent** — VS Code wired via BYOK to the same self-hosted vLLM endpoint, no cloud LLM involved (screenshots in the guide) |
 
 ## How this project was built
 
@@ -20,7 +20,9 @@ ran against the on-prem vLLM server described in
 [`local-inference/`](local-inference/README.md). No cloud API was used at
 any point during development.
 
-![VS Code wired to the on-prem LLM endpoint (BYOK)](local-inference/byok-vscode-2026-08-30.png)
+![The on-prem coding agent at work](local-inference/byok-vscode-2026-08-30_02-56-47.png)
+
+<em>The on-prem coding agent at work — VS Code wired via BYOK to the self-hosted vLLM endpoint.</em>
 
 Two things worth calling out:
 
