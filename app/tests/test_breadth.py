@@ -232,7 +232,8 @@ def test_comparison_route_maps_per_offer_and_reduces():
         route, content, chunks = comparison_route(
             _FakeHybridRetriever(), "Vergleiche die Zahlungsziele.")
     assert route == "Comparison"
-    assert content == "AG0001 ist schneller [AG0001]."
+    # Global citation behavior: grounded answers end with a source line.
+    assert content == "AG0001 ist schneller [AG0001].\n\nQuellen: AG0001, AG0002"
     # One map call per OFFER (AG0001's two chunks merged), not per chunk.
     assert mock_line.call_count == 2
     assert [c.source for c in chunks] == ["AG0001", "AG0002"]

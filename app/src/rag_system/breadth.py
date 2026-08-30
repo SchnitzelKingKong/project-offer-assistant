@@ -20,6 +20,7 @@ import re
 from .citation_markup import _format_date
 from .config import settings
 from .llm import (
+    append_source_line,
     comparison_line,
     comparison_reduce,
     draft_reduce,
@@ -115,6 +116,7 @@ def year_route(retriever: Retriever, question: str) -> tuple[str, str, list]:
         f"(vollständiger Scan über alle {len(by_offer)} Angebote, kein "
         f"Retrieval): {lines}."
     )
+    # No source line: every matching offer is already listed inline.
     return "Breadth", content, []
 
 
@@ -265,7 +267,7 @@ def comparison_route(
 
     text = comparison_reduce(question, lines)
     ranked = [offer_chunks[0] for _, offer_chunks in offers]
-    return ("Comparison", text, ranked)
+    return ("Comparison", append_source_line(text, ranked), ranked)
 
 
 # ----------------------------------------------------------------------
@@ -320,4 +322,4 @@ def draft_route(
 
     text = draft_reduce(question, blocks)
     ranked = [offer_chunks[0] for _, offer_chunks in offers]
-    return ("Draft", text, ranked)
+    return ("Draft", append_source_line(text, ranked), ranked)

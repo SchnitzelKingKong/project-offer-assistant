@@ -25,6 +25,22 @@ from .citation_markup import upgrade_citations
 from .config import settings
 from .retriever import RetrievedChunk
 
+# Questions that are explicitly about WORDING / phrasing ("Wie ist die
+# Abnahme formuliert?", "Wie steht es im Wortlaut?"). Only for these does
+# the model quote passages verbatim (with the deterministic page upgrade);
+# all other questions get paraphrase + inline citations.
+PHRASING_RE = re.compile(
+    r"\b(formulierung|formuliert|formulieren|wortlaut|ausdrucksweise|"
+    r"wie\s+(steht|heißt|lautet|ist\s+\w+\s+(formuliert|geregelt|ausgedrückt))|"
+    r"(wörtlich|sinngemäß)\s+(zitiert|angegeben|formuliert))\b",
+    re.IGNORECASE,
+)
+
+
+def is_phrasing_question(question: str) -> bool:
+    """True when the question explicitly asks about wording/phrasing."""
+    return bool(PHRASING_RE.search(question))
+
 SYSTEM_PROMPT = """Du bist der Angebot-Assistent eines Post-Production-Studios. Du beantwortest
 Fragen zu früheren Angeboten des Studios.
 
@@ -34,14 +50,7 @@ REGELN:
 2. Jede konkrete Aussage (Preis, Datum, Zahlungsbedingung, Formulierung) muss
    einem konkreten Angebot zugeordnet sein. Zitiere inline als AG#### —
    OHNE eckige Klammern, direkt nach der zugehörigen Aussage.
-3. Wörtliche Zitate nur, wenn sie etwas beitragen: Bei exakten
-   Formulierungen, Konditionen oder umstrittenen Aussagen führe die
-   entscheidende Passage exakt so an, wie sie im Kontext steht, in
-   deutschen Anführungszeichen („…"). Bei einfachen Fakten reicht die
-   Paraphrase mit Citation — nicht jede Antwort braucht ein wörtliches
-   Zitat. Das Citation-Schema steht NACH dem Zitat — nicht im Satz:
-   "Wörtlich heißt es: „Zahlungsziel: 14 Tage ab Rechnungsdatum." AG0085"
-   (Datum, Bindestrich und Seitenzahl ergänzt die App automatisch).
+3. {quote_rule}
 4. Zitiere jede Quelle pro Aussage NUR EINMAL — nicht im Satz UND nochmal am
    Satzende, und nicht am Ende eines Satzes UND nochmal am Anfang des
    nächsten. Ein Satz, der bereits mit AG#### belegt ist, braucht keine
@@ -293,8 +302,21 @@ def generate_answer(
         f"[{i}] ({chunk.source}, score {chunk.score:.2f})\n{chunk.text}"
         for i, chunk in enumerate(chunks, start=1)
     )
+    quote_rule = (
+        "Wörtliche Zitate: Die Frage bezieht sich explizit auf den Wortlaut. "
+        "Führe die entscheidende Passage exakt so an, wie sie im Kontext "
+        "steht, in deutschen Anführungszeichen („…\u201c). Das Citation-Schema "
+        "steht NACH dem Zitat — nicht im Satz: "
+        "\"Wörtlich heißt es: ‚Zahlungsziel: 14 Tage ab Rechnungsdatum.' "
+        "AG0085\" (Datum und Seitenzahl ergänzt die App automatisch)."
+        if is_phrasing_question(question)
+        else "Wörtliche Zitate: NUR bei expliziten Fragen nach dem Wortlaut — "
+        "die Frage ist keine solche. Paraphrasiere mit Citation; führe keine "
+        "Passagen wörtlich an."
+    )
     system_prompt = SYSTEM_PROMPT.format(
-        offer_count=offer_count if offer_count else "eine große Zahl"
+        offer_count=offer_count if offer_count else "eine große Zahl",
+        quote_rule=quote_rule,
     )
     messages = [
         {"role": "system", "content": system_prompt},
@@ -316,7 +338,24 @@ def generate_answer(
     content = _strip_think(response["message"]["content"] or "").strip()
     # Deterministic page lookup: [AG####] → [AG#### | S. X] where the model's
     # verbatim quote can be located in the chunk text (notebooks/05).
-    return upgrade_citations(content, chunks)
+    content = upgrade_citations(content, chunks)
+    return append_source_line(content, chunks)
+
+
+def append_source_line(content: str, chunks: list) -> str:
+    """Global citation behavior: every answer grounded on retrieved chunks
+    ends with a single 'Quellen: AG####, …' line (distinct offer ids, in
+    order of appearance). Skipped when the model already wrote one, or when
+    there are no chunks (deterministic routes)."""
+    if not chunks or "Quellen:" in content:
+        return content
+    seen: list[str] = []
+    for chunk in chunks:
+        if chunk.source and chunk.source not in seen:
+            seen.append(chunk.source)
+    if not seen:
+        return content
+    return content.rstrip() + "\n\nQuellen: " + ", ".join(seen)
 
 
 # =====================================================================
@@ -405,15 +444,16 @@ DRAFT_MAP_PROMPT = (
     "Extrahiere NUR Bausteine, die explizit im Text stehen. Antworte NUR "
     "mit einem JSON-Objekt dieser Form:\n"
     '{"positions": [{"position": string, "menge": string, "satz_eur": number|null, '
-    '"betrag_eur": number|null, "korrupt": boolean}], '
+    '"betrag_eur": number|null, "unzuordenbar": boolean}], '
     '"zahlungsbedingungen": string|null, "abnahme": string|null, '
     '"lieferformate": [string], "revisionen": string|null}\n'
     "Regeln:\n"
     "- positions: alle Leistungspositionen mit Menge, Einzelsatz und Betrag, "
     "wie im Angebot ausgewiesen (Sätze in EUR netto).\n"
-    "- Korrupte oder redigierte Positionsnamen (z. B. '[ADRESSE_REDACTED]') "
-    "TROTZDEM als Position mit Menge/Satz/Betrag aufnehmen, den Namen als "
-    "'Position (Name unlesbar)' setzen und 'korrupt': true flaggen.\n"
+    "- Positionen, deren Name unlesbar, redigiert oder nicht klar zuordenbar "
+    "ist (z. B. '[ADRESSE_REDACTED]'), TROTZDEM als Position mit "
+    "Menge/Satz/Betrag aufnehmen, den Namen als 'Position (nicht klar "
+    "zuordenbar)' setzen und 'unzuordenbar': true flaggen.\n"
     "- zahlungsbedingungen: Zahlungsziel, Skonto, Raten — kurze Wiedergabe.\n"
     "- abnahme: Abnahme-Klausel — kurze Wiedergabe.\n"
     "- lieferformate: genannte Dateiformate/Container (z. B. MXF, MP4, ProRes).\n"
@@ -472,10 +512,11 @@ DRAFT_REDUCE_PROMPT = (
     "- Übernimm nur Bausteine, die zur neuen Anfrage passen. Passt nichts, "
     "schreibe das ehrlich in einem Satz.\n"
     "- Erfinde keine Sätze, die nicht in den Bausteinen stehen.\n"
-    "- Positionen mit 'korrupt': true kennzeichne als 'Position (Name "
-    "unlesbar)' und erwähne, dass der Positionsnamen im historischen Angebot "
-    "korrupt/redigiert ist. Weicht die Summe dadurch vom Nettobetrag des "
-    "Quellangebots ab, erwähne das in einem Satz beim Richtpreis.\n"
+    "- Positionen mit 'unzuordenbar': true kennzeichne als 'Position (nicht "
+    "klar zuordenbar)' und erwähne, dass der Positionsnamen im historischen "
+    "Angebot nicht eindeutig lesbar ist. Weicht die Summe dadurch vom "
+    "Nettobetrag des Quellangebots ab, erwähne das in einem Satz beim "
+    "Richtpreis.\n"
     "- Schreibe NUR das Endergebnis — keine Zwischenschritte, keine "
     "Korrekturen, keine 'Erneute Prüfung'. Rechne einmal sauber durch."
 )
