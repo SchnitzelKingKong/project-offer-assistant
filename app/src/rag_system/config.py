@@ -4,10 +4,27 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Repo root (this file lives in app/src/rag_system/).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# Load .env from the repo root regardless of the current working directory.
+load_dotenv(_REPO_ROOT / ".env")
+
+
+def _resolve(path: str) -> str:
+    """Resolve a (possibly relative) path against the repo root.
+
+    This keeps the app working whether it is started from the repo root
+    (``streamlit run app/streamlit_app.py``) or from ``app/`` (``make run``).
+    """
+    if not path:
+        return ""
+    p = Path(path)
+    return str(p if p.is_absolute() else _REPO_ROOT / p)
 
 
 @dataclass(frozen=True)
@@ -27,16 +44,16 @@ class Settings:
     embed_model: str = os.getenv("EMBED_MODEL", "nomic-embed-text")
 
     # Vector store
-    index_dir: str = os.getenv("INDEX_DIR", "index_storage")
+    index_dir: str = _resolve(os.getenv("INDEX_DIR", "app/.index_storage"))
     chroma_collection: str = os.getenv("CHROMA_COLLECTION", "offers")
 
     # Source documents
-    data_dir: str = os.getenv("DATA_DIR", "data")
+    data_dir: str = _resolve(os.getenv("DATA_DIR", "data"))
 
     # Optional directory of redacted full-text offer documents
     # (``<angebot_id>.txt``) for the offer detail panel. Empty → the panel
     # falls back to the indexed chunks.
-    offer_text_dir: str = os.getenv("OFFER_TEXT_DIR", "")
+    offer_text_dir: str = _resolve(os.getenv("OFFER_TEXT_DIR", ""))
 
     # Retrieval
     top_k: int = 3
