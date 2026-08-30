@@ -48,15 +48,28 @@ def _chip_replacement(match: re.Match) -> str:
     return f'<a class="cite-chip" data-offer="{offer_id}" href="#">{offer_id}</a>'
 
 
-# --- Page-level citations: [AG####] → [AG#### | S. X] ------------------------
+# --- Page-level citations: AG#### → AG####, Seite X --------------------------
 # The model quotes the decisive passage verbatim (in „…"); the page is then
 # resolved DETERMINISTICALLY from the "[Seite X von Y]" markers inside the
 # chunk text. A quote that cannot be located verbatim never gets a page
 # (ported from notebooks/05).
+#
+# Only citations that DIRECTLY follow a verbatim quote (short gap) are
+# upgraded — the trailing source list ("Quellen: AG0085, AG0086") stays a
+# plain, comma-separated overview.
 
 PAGE_RE = re.compile(r"\[Seite (\d+) von \d+\]")
 QUOTE_RE = re.compile(r"\u201e(.+?)\u201c", flags=re.DOTALL)
-CITE_RE = re.compile(r"\[(AG\d{4})(?:\s*\|[^\]]*)?\]")
+# Bracketed ids (legacy model output) or plain ids; never one that already
+# carries a page ("AG0085, Seite 4").
+CITE_RE = re.compile(
+    r"(\[(AG\d{4})(?:\s*\|[^\]]*)?\]|(?<![A-Za-z0-9\[])(AG\d{4})(?!\d))"
+    r"(?!\s*,\s*(?:S\.|Seite)\s*\d)"
+)
+# The gap between the closing quote and the citation must contain no letters
+# for the page upgrade to apply — "„…" AG0001" qualifies, but a source list
+# ("„…“ AG0001 … Quellen: AG0001") does not.
+_CITE_GAP_RE = re.compile(r"[A-Za-z]")
 
 
 def _norm(s: str) -> str:
@@ -87,18 +100,19 @@ def page_of_quote(chunk_text: str, quote: str) -> int | None:
 
 
 def upgrade_citations(content: str, chunks: list) -> str:
-    """Append the page to every resolvable citation: ``[AG####]`` →
-    ``[AG#### | S. X]``.
+    """Append the page to citations that directly follow a verbatim quote:
+    ``AG0085`` → ``AG0085, Seite 4`` (and ``[AG0085]`` → ``AG0085, Seite 4``).
 
     For each citation the nearest preceding verbatim quote (``„…"``) is
     located in that offer's chunk texts; the page comes from the page
     markers inside the chunk. Deterministic — no LLM. Citations that cannot
-    be resolved are left as ``[AG####]``.
+    be resolved, or that are not directly after a quote (e.g. the trailing
+    source list), are left as plain ``AG####``.
 
     ``chunks`` is the list of ``RetrievedChunk`` objects the answer was
     grounded on (``.source`` = offer id, ``.text`` = chunk text).
     """
-    quotes = [(m.start(), m.group(1).strip()) for m in QUOTE_RE.finditer(content)]
+    quotes = [(m.end(), m.group(1).strip()) for m in QUOTE_RE.finditer(content)]
     if not quotes:
         return content
     texts: dict[str, list[str]] = {}
@@ -106,18 +120,24 @@ def upgrade_citations(content: str, chunks: list) -> str:
         texts.setdefault(chunk.source, []).append(chunk.text)
     pairs: list[tuple[re.Match, str]] = []
     for m in CITE_RE.finditer(content):
-        preceding = [q for p, q in quotes if p < m.start()]
+        offer_id = m.group(2) or m.group(3)
+        # Only upgrade when a verbatim quote ENDS directly before the
+        # citation (gap without letters) — that is the
+        # "Wörtlich heißt es in AG0085: „…“ AG0085" pattern.
+        preceding = [
+            q for p, q in quotes
+            if p < m.start() and not _CITE_GAP_RE.search(content[p : m.start()])
+        ]
         if not preceding:
             continue
         quote = preceding[-1]
-        offer_id = m.group(1)
         page = None
         for text in texts.get(offer_id, []):
             page = page_of_quote(text, quote)
             if page:
                 break
         if page:
-            pairs.append((m, f"[{offer_id} | S. {page}]"))
+            pairs.append((m, f"{offer_id}, Seite {page}"))
     # Replace from the end so earlier positions stay valid.
     for m, repl in reversed(pairs):
         content = content[: m.start()] + repl + content[m.end():]

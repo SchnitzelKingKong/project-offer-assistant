@@ -101,25 +101,45 @@ def test_page_of_quote_normalizes_whitespace_and_quotes():
 
 def test_upgrade_citations_appends_page():
     chunk = _chunk("[Seite 1 von 4] Kopf\n[Seite 2 von 4] Zahlung 14 Tage netto.")
-    content = "Das Angebot sieht vor: \u201eZahlung 14 Tage netto.\u201c [AG0001]"
+    content = "Wörtlich heißt es in AG0001: \u201eZahlung 14 Tage netto.\u201c AG0001"
     upgraded = upgrade_citations(content, [chunk])
-    assert "[AG0001 | S. 2]" in upgraded
+    assert "AG0001, Seite 2" in upgraded
+
+
+def test_upgrade_citations_bracketed_id_becomes_plain_with_page():
+    chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = "Wörtlich: \u201eZahlung 14 Tage netto.\u201c [AG0001]"
+    upgraded = upgrade_citations(content, [chunk])
+    assert "AG0001, Seite 2" in upgraded
+    assert "[AG0001]" not in upgraded
 
 
 def test_upgrade_citations_without_quotes_unchanged():
     chunk = _chunk("[Seite 1 von 4] Zahlung 14 Tage netto.")
-    content = "Kurzantwort ohne Zitat [AG0001]."
+    content = "Kurzantwort ohne Zitat AG0001."
     assert upgrade_citations(content, [chunk]) == content
 
 
 def test_upgrade_citations_unresolvable_quote_keeps_plain_citation():
     chunk = _chunk("[Seite 1 von 4] Kompletlich anderer Text.")
-    content = "Behauptung: \u201eetwas anderes\u201c [AG0001]."
+    content = "Behauptung: \u201eetwas anderes\u201c AG0001."
     assert upgrade_citations(content, [chunk]) == content
 
 
 def test_upgrade_citations_ignores_other_offers_chunks():
     other = _chunk("[Seite 5 von 9] Zahlung 14 Tage netto.", source="AG0002")
-    content = "Zitat: \u201eZahlung 14 Tage netto.\u201c [AG0001]."
+    content = "Zitat: \u201eZahlung 14 Tage netto.\u201c AG0001."
     # The quote only exists in AG0002's chunk → AG0001 citation stays plain.
     assert upgrade_citations(content, [other]) == content
+
+
+def test_upgrade_citations_leaves_trailing_source_list_plain():
+    """The source list is far from any quote → stays a plain overview."""
+    chunk = _chunk("[Seite 2 von 4] Zahlung 14 Tage netto.")
+    content = (
+        "Wörtlich heißt es in AG0001: \u201eZahlung 14 Tage netto.\u201c AG0001\n\n"
+        "Quellen: AG0001, AG0002"
+    )
+    upgraded = upgrade_citations(content, [chunk])
+    assert "AG0001, Seite 2" in upgraded
+    assert "Quellen: AG0001, AG0002" in upgraded  # untouched
