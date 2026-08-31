@@ -12,6 +12,7 @@ router, HyDE, statistics and comparison routes).
 | `notebooks/` | 5 demo notebooks (run in order 01 → 05) | yes |
 | `source/offers/` | 10 fictitious sample offer PDFs + `generate_sample_pdfs.py` | yes |
 | `scripts/sanitizer.py` | `PIISanitizer` (regex PII layer) — imported by notebook 02 from `scripts/` | yes |
+| `scripts/scrub_notebook_outputs.py` | Scrubs local paths/hosts from notebook **outputs** before committing | yes |
 | `data/redacted/` | Sanitized full texts + PII block reports (fictitious PII) | yes |
 | `data/extracted/` | Structured facts per offer (JSON) | yes |
 | `data/raw/` | Unredacted intermediate texts | **no** |
@@ -37,6 +38,21 @@ idempotent — re-running 03 rebuilds the index from scratch.
 3. `03-build-index` — chunk (1500/300) + embed (nomic-embed-text) → Chroma
 4. `04-retrieval-demo-rag` — hybrid retrieval, rerank, refusal gate, citations
 5. `05-retrieval-demo-full` — router, HyDE, statistics + comparison routes
+
+## Before committing notebook changes
+
+Notebook outputs are committed, but they are generated on a local machine and
+can leak environment details (absolute paths, the internal LLM endpoint).
+Run the scrubber before every commit that includes notebook changes:
+
+```bash
+python scripts/scrub_notebook_outputs.py --check   # report only (exit 1 if found)
+python scripts/scrub_notebook_outputs.py           # scrub in place
+```
+
+It rewrites **outputs only** (cell sources stay untouched):
+repo-absolute paths become repo-relative, other `/Users/<name>/...` paths
+become `<HOME>/...`, and internal hosts/URLs become `<INTERNAL-HOST>`/`<URL>`.
 
 ## Using the index in the app
 
