@@ -60,7 +60,7 @@ notebooks (persisted to `data/db/chroma/`) and the app only reloads it via
 | LLM endpoint | any OpenAI-compatible API: vLLM on a GPU machine (see [`docs/`](docs/OVERVIEW.md)) or Ollama local |
 | OS | macOS / Linux (developed on macOS) |
 
-No cloud accounts, no paid APIs. Everything runs on your own hardware / LAN.
+No cloud accounts neccessary. Everything can run on your own hardware / LAN. [`docs/`](docs/OVERVIEW.md)
 
 ## Setup
 
@@ -135,7 +135,13 @@ are plain Python with direct `chromadb` / `ollama` / OpenAI-compatible API
 calls. This keeps the runtime dependency footprint small, avoids
 framework lock-in, and makes every stage (router, fusion, refusal gate)
 directly inspectable and testable. It is a deliberate choice that can be
-revisited later — see [`docs/OVERVIEW.md`](docs/OVERVIEW.md) for the outlook.
+revisited later — see [`docs/OVERVIEW.md`](docs/OVERVIEW.md) for the
+outlook.
+
+The key technical decisions are recorded as short
+[architecture decision records](docs/adr/README.md) (no framework at
+runtime, BM25 built at runtime, 3-layer env loading, PII sanitization in
+the pipeline, SQLite facts DB as a prepared building block).
 
 ## Usage
 
@@ -163,3 +169,38 @@ make -C app test              # run the test suite (92 tests)
 - API keys live in `~/.config/rag-quote-history/secrets.env` — outside the
   workspace, never committed.
 - All inference runs locally / on your own LAN.
+
+## Scope and limitations
+
+This is a course project, deliberately scoped to a single-developer learning
+deliverable — not a production system. Consciously out of scope:
+
+- **Aggregation over all offers** — cross-offer statistics run through RAG
+  with an explicit limitation note; the SQL path (Facts DB in SQLite) is
+  built by the pipeline and prepared as the next step.
+- **No CI/CD, no release automation** — the test suite runs locally via
+  `make -C app test`.
+- **Demo index** — the committed pipeline data covers 10 fictitious sample
+  offers; the app is index-agnostic and works with any index built by the
+  pipeline (see `INDEX_DIR`).
+- **HyDE is off by default** — query expansion is deterministic
+  (abbreviations, synonyms); LLM-based hypothetical answers are available
+  but disabled.
+
+None of this is accidental — it is the right scope for a course project.
+The outlook in [`docs/OVERVIEW.md`](docs/OVERVIEW.md) lists the natural
+next steps (agentic toolset, cross-offer synthesis, SQL path).
+
+## Course context
+
+This repository is the final project for the
+[OpenCampus.sh](https://www.opencampus.sh/) course
+[*From LLMs to Agents*](https://edu.opencampus.sh/course/632). OpenCampus is
+a non-profit organization working in close collaboration with local
+universities. The course provided the concepts and the framework; the code,
+pipeline, and documentation in this repository are original to this project.
+
+## License
+
+Copyright 2026 Tobias Hölter. Licensed under the MIT License — see
+[LICENSE](LICENSE).

@@ -11,6 +11,7 @@ inference stack behind them was set up.
 |---|---|
 | [`local-inference/SETUP.md`](local-inference/SETUP.md) | The self-hosted LLM endpoint: vLLM on a 2-GPU machine (systemd service, tuned serving flags, monitoring) and Ollama as the no-GPU alternative — plus how the app and notebooks wire into it |
 | [`SETUP.md` § BYOK](local-inference/SETUP.md#bonus-developing-with-the-on-prem-agent-byok) | Proof: the entire repository was developed with an **on-prem coding agent** — VS Code wired via BYOK to the same self-hosted vLLM endpoint, no cloud LLM involved (screenshots in the guide) |
+| [`adr/`](adr/README.md) | Architecture decision records — the key technical decisions (no framework at runtime, BM25 at runtime, 3-layer env, PII in pipeline, SQLite facts DB) with context and consequences |
 
 ## How this project was built
 
@@ -59,6 +60,8 @@ cited answer out. The deliberate choice to keep the app framework-free
 ```
 docs/
 ├── OVERVIEW.md                this overview
+├── data-journey.svg           data journey diagram (embedded in the root README)
+├── adr/                       architecture decision records (index + 5 ADRs)
 └── local-inference/
     ├── SETUP.md               vLLM + Ollama setup guide (on-prem)
     ├── grafana-monitoring-2026-08-30.png
