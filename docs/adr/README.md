@@ -12,3 +12,4 @@ they are a decision log, not design documents.
 | [0004](0004-pii-sanitization-before-indexing.md) | PII sanitization in the pipeline, never in the app |
 | [0005](0005-sqlite-facts-db-prepared.md) | SQLite facts DB as a prepared building block for the SQL path |
 | [0006](0006-vision-pdf-normalization.md) | Vision-based PDF normalization after failed text-layer extraction |
+| [0007](0007-verifiable-citations.md) | Every claim is verifiable — citations resolved deterministically, source always available |

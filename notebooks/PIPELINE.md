@@ -39,6 +39,24 @@ idempotent — re-running 03 rebuilds the index from scratch.
 4. `04-retrieval-demo-rag` — hybrid retrieval, rerank, refusal gate, citations
 5. `05-retrieval-demo-full` — router, HyDE, statistics + comparison routes
 
+### Resume mode vs. clean slate
+
+The three data stages (01–03) start with a `CLEAN_SLATE` flag, **default
+`False` (resume mode)**:
+
+- **`False` (default):** finished offers are skipped via the per-offer
+  caches, so re-running is safe and cheap — existing data is never
+  overwritten. If no data exists yet, the run simply processes everything.
+- **`True`:** the stage's own output directory is wiped first and every
+  offer is reprocessed from scratch (fresh LLM calls). Use this when you
+  want to regenerate the committed outputs or after changing the
+  extraction prompts/logic.
+
+Each flag only affects its own stage (01 → `data/raw/`, 02 →
+`data/redacted/` + `data/extracted/`, 03 → `data/db/`); later stages are
+untouched. Note 03 rebuilds the Chroma collection either way, so its flag
+only controls whether the artifact directories are removed first.
+
 ## Before committing notebook changes
 
 Notebook outputs are committed, but they are generated on a local machine and

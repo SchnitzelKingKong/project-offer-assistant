@@ -11,7 +11,7 @@ inference stack behind them was set up.
 |---|---|
 | [`local-inference/SETUP.md`](local-inference/SETUP.md) | The self-hosted LLM endpoint: vLLM on a 2-GPU machine (systemd service, tuned serving flags, monitoring) and Ollama as the no-GPU alternative — plus how the app and notebooks wire into it |
 | [`SETUP.md` § BYOK](local-inference/SETUP.md#bonus-developing-with-the-on-prem-agent-byok) | Proof: the entire repository was developed with an **on-prem coding agent** — VS Code wired via BYOK to the same self-hosted vLLM endpoint, no cloud LLM involved (screenshots in the guide) |
-| [`adr/`](adr/README.md) | Architecture decision records — the key technical decisions (no framework at runtime, vision-based PDF normalization, BM25 at runtime, 3-layer env, PII in pipeline, SQLite facts DB) with context and consequences |
+| [`adr/`](adr/README.md) | Architecture decision records — the key technical decisions (no framework at runtime, vision-based PDF normalization, BM25 at runtime, 3-layer env, PII in pipeline, SQLite facts DB, verifiable citations) with context and consequences |
 
 ## How this project was built
 
