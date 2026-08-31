@@ -88,6 +88,17 @@ def extract_offer_id(question: str) -> str | None:
     return match.group(0) if match else None
 
 
+def extract_single_offer_id(question: str) -> str | None:
+    """The referenced offer id, but only when EXACTLY ONE is named.
+
+    A question naming several offers ("Vergleiche AG0002 und AG0006")
+    must not be filtered to the first one — it belongs to the comparison
+    route (or unfiltered RAG), so this returns None for multi-ID questions.
+    """
+    ids = set(AG_RE.findall(question))
+    return ids.pop() if len(ids) == 1 else None
+
+
 def is_ambiguous(question: str) -> bool:
     """Price/date/term question without offer reference or year."""
     return bool(AMBIGUOUS_TOPIC_RE.search(question)) and not YEAR_RE.search(question)
@@ -182,7 +193,11 @@ def _hyde_for(question: str) -> str | None:
 
 def run_query(retriever: Retriever, question: str) -> QueryResult:
     """Run the full query pipeline for one question."""
-    offer_id = extract_offer_id(question)
+    # ID-aware retrieval only for a SINGLE referenced offer. A question
+    # naming several offers (e.g. "Vergleiche AG0002 und AG0006") must not
+    # be filtered to the first one — it falls through to the comparison
+    # route (or unfiltered RAG) instead.
+    offer_id = extract_single_offer_id(question)
 
     # 1) ID-aware retrieval: filter to the referenced offer, no fallback.
     if offer_id:
@@ -236,9 +251,14 @@ def run_query(retriever: Retriever, question: str) -> QueryResult:
         return QueryResult(type="answer", route=route, content=content, chunks=chunks)
 
     # 4) Comparison (vergleiche/unterschiede) → map-reduce over topic retrieval.
+    #    When the question names specific offers ("Vergleiche AG0002 und
+    #    AG0085"), scope retrieval to exactly those offers; otherwise fall
+    #    back to free topic retrieval.
     if is_comparison(question):
+        mentioned = list(dict.fromkeys(AG_RE.findall(question)))
         route, content, chunks = comparison_route(
-            retriever, question, hyde_passage=_hyde_for(question)
+            retriever, question, hyde_passage=_hyde_for(question),
+            offer_ids=mentioned or None,
         )
         return QueryResult(type="answer", route=route, content=content, chunks=chunks)
 

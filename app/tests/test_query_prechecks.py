@@ -2,6 +2,7 @@
 
 from rag_system.query import (
     extract_offer_id,
+    extract_single_offer_id,
     is_aggregation,
     is_ambiguous,
     is_price_question,
@@ -16,6 +17,32 @@ def test_extract_offer_id_found():
 
 def test_extract_offer_id_not_found():
     assert extract_offer_id("Wie sind die Zahlungsbedingungen?") is None
+
+
+def test_extract_single_offer_id_single_reference():
+    assert (
+        extract_single_offer_id("Wie hoch war der Nettobetrag von AG0085?")
+        == "AG0085"
+    )
+
+
+def test_extract_single_offer_id_no_reference():
+    assert extract_single_offer_id("Wie sind die Zahlungsbedingungen?") is None
+
+
+def test_extract_single_offer_id_multiple_references():
+    # A comparison question naming two offers must NOT be filtered to one.
+    assert (
+        extract_single_offer_id("Vergleiche AG0002 und AG0006.") is None
+    )
+
+
+def test_extract_single_offer_id_repeated_reference():
+    # The same id mentioned twice is still a single-offer question.
+    assert (
+        extract_single_offer_id("AG0085: Preis und Datum von AG0085?")
+        == "AG0085"
+    )
 
 
 def test_ambiguous_price_question_without_reference():

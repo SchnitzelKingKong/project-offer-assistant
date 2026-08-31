@@ -250,6 +250,37 @@ def test_comparison_route_empty_retrieval():
     assert chunks == []
 
 
+class _ScopedRetriever:
+    """Returns chunks only for the offer id it is filtered to."""
+
+    def hybrid_search(self, question, top_n=10, angebot_id=None,
+                      hyde_passage=None):
+        if angebot_id == "AG0002":
+            return [RetrievedChunk(text="AG0002: 14 Tage", source="AG0002",
+                                   score=0.9, metadata={})]
+        if angebot_id == "AG0085":
+            return [RetrievedChunk(text="AG0085: 30 Tage", source="AG0085",
+                                   score=0.8, metadata={})]
+        # Unfiltered topic retrieval would pull in unrelated offers.
+        return [RetrievedChunk(text="AG0090: 30 Tage", source="AG0090",
+                               score=0.7, metadata={})]
+
+
+def test_comparison_route_scopes_to_named_offers():
+    with patch("rag_system.breadth.comparison_line",
+               side_effect=lambda q, oid, text: f"{oid}: 14 Tage"), \
+         patch("rag_system.breadth.comparison_reduce",
+               return_value="AG0002 vs AG0085."):
+        route, content, chunks = comparison_route(
+            _ScopedRetriever(), "Vergleiche AG0002 und AG0085.",
+            offer_ids=["AG0002", "AG0085"],
+        )
+    assert route == "Comparison"
+    # Only the two named offers are compared — the unrelated AG0090
+    # that free topic retrieval would return is excluded.
+    assert [c.source for c in chunks] == ["AG0002", "AG0085"]
+
+
 # --- Draft route (map/reduce mocked) -----------------------------------------
 
 

@@ -239,16 +239,32 @@ def comparison_route(
     retriever: Retriever,
     question: str,
     hyde_passage: str | None = None,
+    offer_ids: list[str] | None = None,
 ) -> tuple[str, str, list[RetrievedChunk]]:
     """MAP-REDUCE (tree_summarize principle) over topic retrieval.
 
     Retrieve on the topic (top-20, dedup by offer) → MAP: one fact line per
     offer → REDUCE: the comparison. Hand-rolled instead of a framework
     summarizer so the hybrid BM25+vector+RRF retrieval pipeline is kept.
+
+    When ``offer_ids`` names the offers to compare (e.g. "Vergleiche AG0002
+    und AG0085"), retrieval is scoped to exactly those offers — one
+    topic-relevant retrieval per named offer — instead of free topic
+    retrieval that would pull in unrelated offers.
     """
-    chunks = retriever.hybrid_search(
-        question, top_n=20, hyde_passage=hyde_passage
-    )
+    if offer_ids:
+        chunks: list[RetrievedChunk] = []
+        for offer_id in offer_ids:
+            chunks.extend(
+                retriever.hybrid_search(
+                    question, top_n=20, angebot_id=offer_id,
+                    hyde_passage=hyde_passage,
+                )
+            )
+    else:
+        chunks = retriever.hybrid_search(
+            question, top_n=20, hyde_passage=hyde_passage
+        )
     by_offer: dict[str, list[RetrievedChunk]] = {}
     for chunk in chunks:
         by_offer.setdefault(chunk.source, []).append(chunk)
