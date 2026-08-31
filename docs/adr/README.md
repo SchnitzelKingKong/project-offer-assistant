@@ -11,3 +11,4 @@ they are a decision log, not design documents.
 | [0003](0003-three-layer-env-loading.md) | Three-layer env loading with secrets outside the workspace |
 | [0004](0004-pii-sanitization-before-indexing.md) | PII sanitization in the pipeline, never in the app |
 | [0005](0005-sqlite-facts-db-prepared.md) | SQLite facts DB as a prepared building block for the SQL path |
+| [0006](0006-vision-pdf-normalization.md) | Vision-based PDF normalization after failed text-layer extraction |

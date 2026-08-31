@@ -37,11 +37,19 @@ app/
 ├── scripts/build_index.py  (re)build the vector index from data/
 ├── tests/                  pytest suite (92 tests)
 └── Makefile                install / index / run / test targets
-notebooks/                  offer pipeline (PDF → sanitize → extract → index → demo)
+notebooks/                  offer pipeline (run in order 01 → 05)
+├── 01-ingest-normalize.ipynb     PDF → normalized, content-verified text
+├── 02-sanitize-extract.ipynb     PII redaction + structured fact extraction
+├── 03-build-index.ipynb          chunking + embedding → Chroma index + SQLite facts DB
+├── 04-retrieval-demo-rag.ipynb   hybrid retrieval, refusal gate, cited answers
+└── 05-retrieval-demo-full.ipynb  routing, reranking, HyDE, breadth routes
 source/offers/              fictitious sample offers + generator
 scripts/                    pipeline scripts (sanitizer.py, requirements.txt)
 data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
-docs/                       sidequest documentation (e.g. vLLM setup)
+docs/                       project documentation
+├── adr/                    architecture decision records
+├── local-inference/        vLLM setup guide
+└── presentation/           course presentation
 .env.example                default configuration (committed)
 .env                        local overrides (git-ignored)
 ```
@@ -99,7 +107,19 @@ All pipeline parameters (chunking, RRF weights, HyDE, refusal thresholds,
 
 The offer pipeline (PDF → sanitize → extract → index → retrieval demo) lives
 at the repository root: `notebooks/`, `source/offers/`, `scripts/`,
-`data/`. See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout,
+`data/`. It is a chain of five notebooks, run in order — each stage's output
+is the next stage's input, and the final output (the Chroma index) is the
+only interface to the app:
+
+| Notebook | Stage | What it does |
+|---|---|---|
+| [`01-ingest-normalize`](notebooks/01-ingest-normalize.ipynb) | Ingest & normalize | Offer PDFs → normalized, content-verified text (vision extraction + deterministic fidelity check) |
+| [`02-sanitize-extract`](notebooks/02-sanitize-extract.ipynb) | Sanitize & extract | PII redaction + structured fact extraction (dates, prices, line items) |
+| [`03-build-index`](notebooks/03-build-index.ipynb) | Build index | Chunking + embedding → Chroma vector index (and the SQLite facts DB) |
+| [`04-retrieval-demo-rag`](notebooks/04-retrieval-demo-rag.ipynb) | Retrieval demo (RAG) | Hybrid retrieval (BM25 + vector + RRF), refusal gate, cited answers |
+| [`05-retrieval-demo-full`](notebooks/05-retrieval-demo-full.ipynb) | Retrieval demo (full) | Question routing, LLM reranking, HyDE, statistics and comparison routes |
+
+See [`notebooks/PIPELINE.md`](notebooks/PIPELINE.md) for the layout,
 setup, and how to run the notebooks (01 → 05).
 
 ### Data journey
@@ -140,8 +160,9 @@ outlook.
 
 The key technical decisions are recorded as short
 [architecture decision records](docs/adr/README.md) (no framework at
-runtime, BM25 built at runtime, 3-layer env loading, PII sanitization in
-the pipeline, SQLite facts DB as a prepared building block).
+runtime, vision-based PDF normalization, BM25 built at runtime, 3-layer
+env loading, PII sanitization in the pipeline, SQLite facts DB as a
+prepared building block).
 
 ## Usage
 
