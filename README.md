@@ -45,6 +45,11 @@ notebooks/                  offer pipeline (run in order 01 → 05)
 ├── 03-build-index.ipynb          chunking + embedding → Chroma index + SQLite facts DB
 ├── 04-retrieval-demo-rag.ipynb   hybrid retrieval, refusal gate, cited answers
 └── 05-retrieval-demo-full.ipynb  routing, reranking, HyDE, breadth routes
+testbench/                  cross-domain evaluation (STALE — read-only, see below)
+├── 01-software-manual-rag.ipynb  RAG on a foreign corpus (Software Manual) + golden set
+├── 02-video-transcript-rag.ipynb retrieval canary on a course video transcript
+├── evaluation/                 golden-set + canary results (CSV / markdown)
+└── HANDOFF.md                  provenance + consistency notes
 source/offers/              fictitious sample offers + generator
 scripts/                    pipeline scripts (sanitizer.py, requirements.txt)
 data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
@@ -164,6 +169,31 @@ The key technical decisions are recorded as short
 runtime, vision-based PDF normalization, BM25 built at runtime, 3-layer
 env loading, PII sanitization in the pipeline, SQLite facts DB as a
 prepared building block).
+
+## Cross-Domain Evaluation (testbench)
+
+The pipeline above is demonstrated on the offer archive. To show that the
+retrieval stack **generalises beyond offers**, [`testbench/`](testbench/)
+contains two exploration notebooks that run the same pipeline against
+**foreign-domain corpora** — documents that are *not* offer PDFs:
+
+| Notebook | Corpus | What it shows |
+|---|---|---|
+| [`01-software-manual-rag`](testbench/01-software-manual-rag.ipynb) | Software Manual (4 071 chunks) | Full RAG pipeline + a **golden set of 18 questions** judged by an LLM → **4 correct / 9 partial / 5 wrong** |
+| [`02-video-transcript-rag`](testbench/02-video-transcript-rag.ipynb) | Course video transcript (7 h 38 min) | A retrieval **canary** that plain vector search fails (3/10) and the full hybrid + rerank pipeline fixes (8/10) |
+
+The machine-readable results live in [`testbench/evaluation/`](testbench/evaluation/)
+(golden-set CSV + markdown summaries, canary summary). [`testbench/HANDOFF.md`](testbench/HANDOFF.md)
+records the provenance and the consistency notes against the presentation.
+
+> ⚠️ **These are stale, read-only notebooks.** They were run once in a
+> separate workspace and their **outputs are frozen** — they are committed
+> *with* their results so you can inspect exactly what the pipeline produced.
+> **Do not re-run or overwrite them** if you want to see those results: the
+> corpora (the Software Manual PDF, the video transcript) are not part of this
+> repository, so re-running would fail or produce different output and would
+> clobber the frozen evidence. Treat them as a snapshot, not as part of the
+> live pipeline.
 
 ## Usage
 

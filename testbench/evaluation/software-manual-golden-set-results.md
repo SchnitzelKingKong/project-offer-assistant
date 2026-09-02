@@ -1,4 +1,4 @@
-# Golden Set Results — DaVinci Resolve Manual RAG
+# Software Manual Golden Set Results
 
 - Pipeline: hybrid (vector+BM25+RRF 0.5/0.5) → LLM rerank (top 10 → 3) → refusal gate (5/10) → grounded answer
 - Corpus: full reference manual, 4071 chunks, nomic-embed-text

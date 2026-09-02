@@ -8,7 +8,8 @@ generated on a local machine and can leak environment details:
 - the internal LLM/embedding endpoint host (``*.thdi.cc``)
 - any other ``/Users/<name>/...`` path that is not inside this repo
 
-This script rewrites the OUTPUTS of all ``notebooks/*.ipynb`` in place:
+This script rewrites the OUTPUTS of all ``notebooks/*.ipynb`` and
+``testbench/*.ipynb`` in place:
 
 - ``<repo-root>/<subpath>``  ->  ``<repo-name>/<subpath>`` (repo-relative)
 - ``/Users/<name>/...``      ->  ``<HOME>/...`` (outside the repo)
@@ -37,6 +38,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REPO_NAME = REPO_ROOT.name
 NOTEBOOKS_DIR = REPO_ROOT / "notebooks"
+TESTBENCH_DIR = REPO_ROOT / "testbench"
 
 # Order matters: repo paths first, then generic /Users/, then hosts, then URLs.
 REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
@@ -137,9 +139,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    notebooks = sorted(NOTEBOOKS_DIR.glob("*.ipynb"))
+    notebooks = sorted(NOTEBOOKS_DIR.glob("*.ipynb")) + sorted(
+        TESTBENCH_DIR.glob("*.ipynb")
+    )
     if not notebooks:
-        print(f"No notebooks found in {NOTEBOOKS_DIR}")
+        print(f"No notebooks found in {NOTEBOOKS_DIR} or {TESTBENCH_DIR}")
         return 1
 
     total_found = 0
