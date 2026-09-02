@@ -54,7 +54,8 @@ scripts/                    pipeline scripts (sanitizer.py, requirements.txt)
 data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
 docs/                       project documentation
 ├── adr/                    architecture decision records
-└── local-inference/        vLLM setup guide + final presentation (PDF)
+├── local-inference/        vLLM setup guide
+└── presentation/           final presentation (PDF)
 .env.example                default configuration (committed)
 .env                        local overrides (git-ignored)
 ```

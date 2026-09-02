@@ -5,7 +5,7 @@
 # Exception: fictitious sample offers used by the pipeline notebooks
 !source/offers/*.pdf
 # Exception: the final course presentation (PDF export)
-!docs/local-inference/presentation/*.pdf
+!docs/presentation/*.pdf
 
 # Pipeline data: redacted/ and extracted/ are committed (fictitious PII);
 # raw/ (unredacted) and db/ (Chroma index) are build artifacts
