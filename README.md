@@ -48,8 +48,7 @@ notebooks/                  offer pipeline (run in order 01 → 05)
 testbench/                  cross-domain evaluation (STALE — read-only, see below)
 ├── 01-software-manual-rag.ipynb  RAG on a foreign corpus (Software Manual) + golden set
 ├── 02-video-transcript-rag.ipynb retrieval canary on a course video transcript
-├── evaluation/                 golden-set + canary results (CSV / markdown)
-└── HANDOFF.md                  provenance + consistency notes
+└── evaluation/                 golden-set + canary results (CSV / markdown)
 source/offers/              fictitious sample offers + generator
 scripts/                    pipeline scripts (sanitizer.py, requirements.txt)
 data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
@@ -183,8 +182,7 @@ contains two exploration notebooks that run the same pipeline against
 | [`02-video-transcript-rag`](testbench/02-video-transcript-rag.ipynb) | Course video transcript (7 h 38 min) | A retrieval **canary** that plain vector search fails (3/10) and the full hybrid + rerank pipeline fixes (8/10) |
 
 The machine-readable results live in [`testbench/evaluation/`](testbench/evaluation/)
-(golden-set CSV + markdown summaries, canary summary). [`testbench/HANDOFF.md`](testbench/HANDOFF.md)
-records the provenance and the consistency notes against the presentation.
+(golden-set CSV + markdown summaries, canary summary).
 
 > ⚠️ **These are stale, read-only notebooks.** They were run once in a
 > separate workspace and their **outputs are frozen** — they are committed
