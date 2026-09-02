@@ -219,10 +219,6 @@ demo offers, or swap in your own PDFs in the same folder.
 
 ### Screenshots
 
-<!-- TODO: add screenshots here (chat with citations, comparison route,
-     offer detail panel) — link them as:
-     ![Chat with citations](docs/images/chat.png)
--->
 ![The Project Offer Assistant answering a question with cited sources](docs/Streamlitapp-2026-08-30_18-06-28.png)
 
 <em>Figure 2: The Project Offer Assistant in action — a natural-language question about day rates, answered with cited sources (right: the offer detail panel for the clicked citation AG1006).</em>
