@@ -50,8 +50,7 @@ scripts/                    pipeline scripts (sanitizer.py, requirements.txt)
 data/                       pipeline data (redacted/ + extracted/ committed, raw/ + db/ ignored)
 docs/                       project documentation
 ├── adr/                    architecture decision records
-├── local-inference/        vLLM setup guide
-└── presentation/           course presentation
+└── local-inference/        vLLM setup guide + final presentation (PDF)
 .env.example                default configuration (committed)
 .env                        local overrides (git-ignored)
 ```
@@ -238,9 +237,6 @@ This repository is the final project for the
 a non-profit organization working in close collaboration with local
 universities. The course provided the concepts and the framework; the code,
 pipeline, and documentation in this repository are original to this project.
-
-The final presentation is available in
-[`docs/presentation/`](docs/presentation/From-LLMs-to-Agents-OpenCampus.pptx).
 
 ## License
 
