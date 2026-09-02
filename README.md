@@ -2,6 +2,8 @@
 
 *Your in-house offer history as a RAG database — for project-based service providers.*
 
+![Project Offer Assistant cover](docs/project-cover.png)
+
 ## Mission
 
 The Project Offer Assistant turns a growing pile of past project offers into a
@@ -172,6 +174,22 @@ make -C app run               # start the app → http://localhost:8501
 make -C app test              # run the test suite (92 tests)
 ```
 
+### Try it with the bundled demo data
+
+The repository ships with **10 fictitious sample offer PDFs** in
+[`source/offers/`](source/offers/) (plus the generator that produced them,
+`generate_sample_pdfs.py`). These are the pipeline's input — no real customer
+data is involved. After the setup above, you can run the whole pipeline
+end-to-end on them:
+
+```bash
+# from notebooks/, run 01 → 05 in order (see notebooks/PIPELINE.md)
+```
+
+Notebook 01 reads the PDFs straight from `source/offers/`, so a fresh clone is
+ready to play with out of the box — ingest, sanitize, index, and query the
+demo offers, or swap in your own PDFs in the same folder.
+
 ### Screenshots
 
 <!-- TODO: add screenshots here (chat with citations, comparison route,
@@ -220,6 +238,9 @@ This repository is the final project for the
 a non-profit organization working in close collaboration with local
 universities. The course provided the concepts and the framework; the code,
 pipeline, and documentation in this repository are original to this project.
+
+The final presentation is available in
+[`docs/presentation/`](docs/presentation/From-LLMs-to-Agents-OpenCampus.pptx).
 
 ## License
 
